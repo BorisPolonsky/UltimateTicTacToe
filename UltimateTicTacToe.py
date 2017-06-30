@@ -1,5 +1,5 @@
 import copy
-class BigTicTacToe():
+class UltimateTicTacToe():
     class TicTacToe():
         def __init__(self, **kwargs):
             self.slots=[[" "]*3 for i in range(3)]
@@ -33,7 +33,7 @@ class BigTicTacToe():
                 raise ValueError("The slot is already occupied!")
 
     def __init__(self, **kwargs):
-        self.blocks=[[BigTicTacToe.TicTacToe() for i in range(3)]for i in range(3)]
+        self.blocks=[[UltimateTicTacToe.TicTacToe() for i in range(3)]for i in range(3)]
         self.occupancy=[[None for i in range(3)] for i in range(3)]
         self.nextSide=None
         self.nextBlock=None
@@ -42,7 +42,7 @@ class BigTicTacToe():
 
     def Take(self,**kwargs):
         """
-        rtype: bool.  Return True if a side wins the BigTicTacToe. Return False if draw or not full.  
+        rtype: bool.  Return True if a side wins the UltimateTicTacToe. Return False if draw or not full.  
         """
         kwargs["rowBlock"]-=1
         kwargs["columnBlock"]-=1
@@ -80,19 +80,19 @@ class BigTicTacToe():
             raise ValueError("Invalid block selection. Block occupied.")
 
     def __repr__(self):
-        wholeBigTicTacToe=[]      
+        wholeUltimateTicTacToe=[]      
         for rowBlock in self.blocks:
-            rowBigTicTacToeBlocks=[]
+            rowUltimateTicTacToeBlocks=[]
             for rowSlot in range(3):
-                rowBigTicTacToe=[]
+                rowUltimateTicTacToe=[]
                 for columnBlock in range(3):
-                    rowBigTicTacToe.append(" | ".join(rowBlock[columnBlock].slots[rowSlot]))
-                rowBigTicTacToeBlocks.append(" "+"||".join(rowBigTicTacToe)+" ")
-            wholeBigTicTacToe.append("\n---------------------------------\n".join(rowBigTicTacToeBlocks))
-        return "\n=================================\n".join(wholeBigTicTacToe)+"\n"
+                    rowUltimateTicTacToe.append(" | ".join(rowBlock[columnBlock].slots[rowSlot]))
+                rowUltimateTicTacToeBlocks.append(" "+"||".join(rowUltimateTicTacToe)+" ")
+            wholeUltimateTicTacToe.append("\n---------------------------------\n".join(rowUltimateTicTacToeBlocks))
+        return "\n=================================\n".join(wholeUltimateTicTacToe)+"\n"
 
 if __name__=="__main__":
-    T=BigTicTacToe()
+    T=UltimateTicTacToe()
     print(T)
     T.Take(rowBlock=1,columnBlock=1,rowSlot=1,columnSlot=1,side="O")
     print(T)

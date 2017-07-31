@@ -1,4 +1,5 @@
 import copy
+import random
 class UltimateTicTacToe():
     class TicTacToe():
         def __init__(self, **kwargs):
@@ -7,7 +8,7 @@ class UltimateTicTacToe():
             self.__numFilledSlots=0
             return super().__init__(**kwargs)
 
-        def Take(self,row,column,side):
+        def take(self, row, column, side):
             """
             rtype: bool. Return True if:
             A side wins the TicTacToe or draw. 
@@ -18,7 +19,7 @@ class UltimateTicTacToe():
                 if side=="O" or side=="X":
                     self.__numFilledSlots+=1
                     self.__slots[row][column]=side
-                    #Searh row, column and diagonal
+                    #Search row, column and diagonal
                     if (self.__slots[row][0]==self.__slots[row][1] and self.__slots[row][1]==self.__slots[row][2])\
                     or (self.__slots[0][column]==self.__slots[1][column] and self.__slots[1][column]==self.__slots[2][column])\
                     or (row==column and self.__slots[0][0]==self.__slots[1][1] and self.__slots[1][1]==self.__slots[2][2])\
@@ -40,12 +41,30 @@ class UltimateTicTacToe():
         def occupancy(self):
             return self.__occupancy
 
+        @property
+        def validActions(self):
+            """
+            Return a list of actions : [(slotRow,slotColumn),...]
+            Each index starts with 0.
+            """
+            if self.__occupancy!=None:
+                return []
+            #return [(row,column) for column in range(3) for row in range(3) if self.__slots[row][column] ==" "]
+            actions=[]
+            for row in range(3):
+                for column in range(3):
+                    if self.__slots[row][column] ==" ":
+                        actions.append((row,column))
+            return actions
+
+
     def __init__(self, **kwargs):
         self.__blocks=[[UltimateTicTacToe.TicTacToe() for i in range(3)]for i in range(3)]
         self.__occupancy=[[None for i in range(3)] for i in range(3)]
         self.__nextSide=None
         self.__nextBlock=None
-        self.__numFilledBlocks=0# Total number of blocks that can not be filled. 
+        self.__numFilledBlocks=0# Total number of blocks that has been occupied.
+        self.__occupancy=None
         if ("sovereignityUponDraw" in kwargs)==False:
             self.__sovereignityUponDraw="none"
         elif kwargs["sovereignityUponDraw"] in ("none","both"):
@@ -54,9 +73,9 @@ class UltimateTicTacToe():
             raise ValueError('Invalid rule set. "sovereignityUponDraw" should be either "both" or "none".')
         return super().__init__(**kwargs)
 
-    def Take(self,**kwargs):
+    def take(self, **kwargs):
         """
-        rtype: bool.  Return True if a side wins the UltimateTicTacToe. Return False if draw or not full.  
+        rtype: bool.  Return True if draw or a side wins the UltimateTicTacToe. Return False if the game is unfinished.  
         """
         kwargs["rowBlock"]-=1
         kwargs["columnBlock"]-=1
@@ -68,7 +87,7 @@ class UltimateTicTacToe():
             raise ValueError("Rule violation. Invalid block")
         if self.__blocks[kwargs["rowBlock"]][kwargs["columnBlock"]].occupancy()==None:
             if (kwargs["side"]=="O" or kwargs["side"]=="X") and (self.__nextSide==None or self.__nextSide==kwargs["side"]):
-                terminal=self.__blocks[kwargs["rowBlock"]][kwargs["columnBlock"]].Take(kwargs["rowSlot"],kwargs["columnSlot"],kwargs["side"])
+                terminal=self.__blocks[kwargs["rowBlock"]][kwargs["columnBlock"]].take(kwargs["rowSlot"],kwargs["columnSlot"],kwargs["side"])
                 self.__nextSide="O" if kwargs["side"]=="X" else "X"
                 self.__nextBlock=None if self.__blocks[kwargs["rowSlot"]][kwargs["columnSlot"]].occupancy()!=None else self.__blocks[kwargs["rowSlot"]][kwargs["columnSlot"]]
                 if terminal==True:
@@ -82,7 +101,7 @@ class UltimateTicTacToe():
                         vertical=map(lambda x:x if x!="draw" else kwargs["side"],vertical)
                         diagonal1=map(lambda x:x if x!="draw" else kwargs["side"],diagonal1)
                         diagonal2=map(lambda x:x if x!="draw" else kwargs["side"],diagonal2)
-                    #Search row, column and diagonal
+                    # Search row, column and diagonal
                     if (horizontal[0]==horizontal[1] and horizontal[1]==horizontal[2])\
                     or (vertical[0]==vertical[1] and vertical[1]==vertical[2])\
                     or (kwargs["rowBlock"]==kwargs["columnBlock"] and diagonal1[0]==diagonal1[1] and diagonal1[1]==diagonal1[2])\
@@ -95,11 +114,39 @@ class UltimateTicTacToe():
                         self.__occupancy=="draw"
                         self.__nextSide=None
                         self.__nextBlock=None
+                        return True
+                    else:
+                        return False
+                else:
+                    return False  # The game continues.
             else:
                 raise ValueError("Invalid input for side.")
         else:
             raise ValueError("Invalid block selection. Block occupied.")
 
+
+    @property
+    def validActions(self):
+        """
+        Return a list of actions : [(blockRow,blockColumn,slotRow,slotColumn),...]
+        Each index starts with 1.
+        """
+        actions=[]
+        for row in range(3):
+            for column in range(3):
+                for coordinate in self.__blocks[row][column].validActions:
+                    actions.append((row+1, column+1, coordinate[0]+1, coordinate[1]+1))
+        return actions
+
+    @property
+    def randomAction(self):
+        actions=self.validActions
+        if len(actions)>0:
+            return random.choice(actions)
+        else:
+            return None
+
+    @property
     def occupancy(self):
         return self.__occupancy
 
@@ -115,24 +162,27 @@ class UltimateTicTacToe():
             wholeUltimateTicTacToe.append("\n---------------------------------\n".join(rowUltimateTicTacToeBlocks))
         return "\n=================================\n".join(wholeUltimateTicTacToe)+"\n"
 
-if __name__=="__main__":
-    T=UltimateTicTacToe()
-    print(T)
-    T.Take(rowBlock=1,columnBlock=1,rowSlot=1,columnSlot=1,side="O")
-    print(T)
-    T.Take(rowBlock=1,columnBlock=1,rowSlot=3,columnSlot=1,side="X")
-    print(T)
-    T.Take(rowBlock=3,columnBlock=1,rowSlot=3,columnSlot=1,side="O")
-    print(T)
-    T.Take(rowBlock=3,columnBlock=1,rowSlot=1,columnSlot=1,side="X")
-    print(T)
-    T.Take(rowBlock=1,columnBlock=1,rowSlot=2,columnSlot=2,side="O")
-    print(T)
-    T.Take(rowBlock=2,columnBlock=2,rowSlot=1,columnSlot=1,side="X")
-    print(T)
-    T.Take(rowBlock=1,columnBlock=1,rowSlot=3,columnSlot=3,side="O")
-    print(T)
-    T.Take(rowBlock=3,columnBlock=3,rowSlot=1,columnSlot=1,side="X")
-    print(T)
-    T.Take(rowBlock=2,columnBlock=2,rowSlot=3,columnSlot=3,side="O")
-    print(T)
+if __name__ == "__main__":
+    board=UltimateTicTacToe()
+    print(board)
+    board.take(rowBlock=1, columnBlock=1, rowSlot=1, columnSlot=1, side="O")
+    print(board)
+    board.take(rowBlock=1, columnBlock=1, rowSlot=3, columnSlot=1, side="X")
+    print(board)
+    board.take(rowBlock=3, columnBlock=1, rowSlot=3, columnSlot=1, side="O")
+    print(board)
+    board.take(rowBlock=3, columnBlock=1, rowSlot=1, columnSlot=1, side="X")
+    print(board)
+    board.take(rowBlock=1, columnBlock=1, rowSlot=2, columnSlot=2, side="O")
+    print(board)
+    board.take(rowBlock=2, columnBlock=2, rowSlot=1, columnSlot=1, side="X")
+    print(board)
+    board.take(rowBlock=1, columnBlock=1, rowSlot=3, columnSlot=3, side="O")
+    print(board)
+    board.take(rowBlock=3, columnBlock=3, rowSlot=1, columnSlot=1, side="X")
+    print(board)
+    board.take(rowBlock=2, columnBlock=2, rowSlot=3, columnSlot=3, side="O")
+    print(board)
+    print(board.validActions)
+    print(board.randomAction)
+    print(board.occupancy)

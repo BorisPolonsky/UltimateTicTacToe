@@ -1,40 +1,29 @@
 import pickle
 from UltimateTicTacToe import *
 import time
+import os
 class MCT:
     class NodeMCT:
-        def __init__(self,**kwargs):
+        def __init__(self, op= None):
             """
             Initialization of a node.
-            
-            self.__state: the corresponding state of the UltimateTicTacToe board
-            self.__prevNode: the parent node.(For back propogation)
-            self.__val: a tuple of (#game in which the initialtor wins, #total games)
+            self.__op: the operation from last state to reach this node.
+            None for root, (rowBlock, rowColumn, rowSlot, columnSlot) for the rest.
+            self.__val: a tuple of (#game in which the initiator wins+0.5*#draw, #total games)
             self.__next: a list of children of the node.
-            self.__prevAction: None for root. (rowBlock, rowColumn, rowSlot, columnSlot) for children nodes.
             """
-            
-            if ("state" in kwargs)==False:
-                if "sovereignityUponDraw" in kwargs:
-                    self.__state=pickle.dumps(UltimateTicTacToe(sovereignityUponDraw=kwargs["sovereignityUponDraw"]))
-                else:
-                    self.__state=pickle.dumps(UltimateTicTacToe())
-            elif type(kwargs["state"])==UltimateTicTacToe:
-                self.__state=pickle.dumps(kwargs["state"])
+            if op is None or (type(op)==tuple and len(op)==4):
+                self.__op= op
             else:
-                raise TypeError("Invalid type of state.")
-            if ("prevNode" in kwargs)==False:
-                self.__prev=None#For back propogation
-            elif type(kwargs["prevNode"])!=MCT.NodeMCT:
-                raise TypeError("Invalid type of prevNode")
-            if ("val" in kwargs)==False:
-                self.__val=(0,0)
+                raise TypeError('Parameter "op" must be either None or a tuple of (rowBlock, rowColumn, rowSlot, columnSlot)')
+            self.__val=(0,0)
             self.__next=[]
 
         def addChild(self,action):
-            if type(node)!=type(self):
-                raise TypeError("node must be type of {}".format(type(self)))
+            node=MCT.NodeMCT(action)
             self.__next.append(node)
+
+        @property
         def children(self):
             return self.__next[:]
 
@@ -48,15 +37,14 @@ class MCT:
         """
         epoch: Total number of game rounds simluated.
         """
-        for epoch in range(epochNum):
-            node=tree
+        pass
 
-
-    def saveModel(tree,modelPath):
+    @classmethod
+    def saveModel(cls, tree, modelPath):
         if type(tree)!=MCT:
             raise TypeError("Invalid type of tree")
         try:
-            with open(modelpath,"wb") as fileObj:
+            with open(os.path.normpath(modelPath),"wb") as fileObj:
                 pickle.dump(tree,fileObj)
         except IOError as e:
             print(e)
@@ -64,23 +52,11 @@ class MCT:
 def loadModel(**kwargs):
     if "modelPath" in kwargs:
         try:
-            with open(kwargs["modelPath"],"rb") as fileObj:
+            with open(os.path(kwargs["modelPath"]),"rb") as fileObj:
                 return pickle.load(fileObj)
         except IOError as e:
             print(e)
     return None
 
 if __name__=="__main__":
-    T=MCT()
-    T.root=MCT.NodeMCT()
-    T.root.addChild(MCT.NodeMCT())
-    with open (r".\Trees\test.pkl","wb") as fileObj:
-        pickle.dump(T,fileObj)
-    del T
-    with open (r".\Trees\test.pkl","rb") as fileObj:
-        T= pickle.load(fileObj)
-    s=pickle.dumps(T)
-    del T
-    T=pickle.loads(s)
-    del T
-    T=loadModel(modelPath=r".\Trees\test.pkl")
+    pass

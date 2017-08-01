@@ -11,6 +11,7 @@ class MCT:
             self.__prevNode: the parent node.(For back propogation)
             self.__val: a tuple of (#game in which the initialtor wins, #total games)
             self.__next: a list of children of the node.
+            self.__prevAction: None for root. (rowBlock, rowColumn, rowSlot, columnSlot) for children nodes.
             """
             
             if ("state" in kwargs)==False:
@@ -24,12 +25,13 @@ class MCT:
                 raise TypeError("Invalid type of state.")
             if ("prevNode" in kwargs)==False:
                 self.__prev=None#For back propogation
-            elif type(kwargs["prevNode"])!=NodeMCT:
+            elif type(kwargs["prevNode"])!=MCT.NodeMCT:
                 raise TypeError("Invalid type of prevNode")
             if ("val" in kwargs)==False:
                 self.__val=(0,0)
             self.__next=[]
-        def addChild(self,node):
+
+        def addChild(self,action):
             if type(node)!=type(self):
                 raise TypeError("node must be type of {}".format(type(self)))
             self.__next.append(node)
@@ -47,7 +49,8 @@ class MCT:
         epoch: Total number of game rounds simluated.
         """
         for epoch in range(epochNum):
-            ...
+            node=tree
+
 
     def saveModel(tree,modelPath):
         if type(tree)!=MCT:
@@ -55,7 +58,7 @@ class MCT:
         try:
             with open(modelpath,"wb") as fileObj:
                 pickle.dump(tree,fileObj)
-        except IOException as e:
+        except IOError as e:
             print(e)
 
 def loadModel(**kwargs):

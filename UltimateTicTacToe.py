@@ -167,6 +167,17 @@ class UltimateTicTacToe():
     def nextSide(self):
         return self.__nextSide
 
+    def state_report(self):
+        def states():
+            for rowBlock in self.__blocks:
+                for block in rowBlock:
+                    for row in block.slot():
+                        for column in row:
+                            yield column
+        state={}
+        state["state"]=[element for element in states()]
+        return state
+
     def __repr__(self):
         wholeUltimateTicTacToe=[]      
         for rowBlock in self.__blocks:
@@ -185,4 +196,5 @@ if __name__ == "__main__":
     while action is not None:
         board.take(*action, board.nextSide)
         action=board.randomAction
-    print(board.occupancy)
+    print(board)
+    print(board.state_report())

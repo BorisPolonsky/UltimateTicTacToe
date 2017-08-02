@@ -65,7 +65,7 @@ class MCT:
         simulation=1
         backPropogation=2
 
-    def __init__(self):
+    def __init__(self, sovereignityUponDraw="none"):
         """
         Create an empty MCT.
         self.__root: root of the tree
@@ -73,6 +73,12 @@ class MCT:
         """
         self.__root=MCT.NodeMCT()
         self.__size = 0
+        try:
+            UltimateTicTacToe(sovereignityUponDraw=sovereignityUponDraw)
+        except Exception as e:
+            raise e
+        else:
+            self.__sovereignityUponDraw = sovereignityUponDraw
 
     @classmethod
     def trainMCT(cls, tree, epochNum=20):
@@ -87,7 +93,7 @@ class MCT:
             initiator, opponent="X", "O"
 
             currentSide=initiator
-            board=UltimateTicTacToe()
+            board=UltimateTicTacToe(sovereignityUponDraw=tree.__sovereignityUponDraw)
             stage=MCT.Stage.selection
             path=[currentNode]
             while not terminal:
@@ -148,6 +154,10 @@ class MCT:
         self.__size+=1
         return node
 
+    @property
+    def size(self):
+        return self.__size
+
     @classmethod
     def saveModel(cls, tree, modelPath):
         if type(tree)!=MCT:
@@ -157,25 +167,36 @@ class MCT:
                 pickle.dump(tree,fileObj)
         except IOError as e:
             print(e)
-    @property
-    def size(self):
-        return self.__size
 
     @classmethod
     def loadModel(cls,modelPath):
         try:
-            with open(os.path.normpath(modelPath),"rb") as fileObj:
+            with open(os.path.normpath(modelPath), "rb") as fileObj:
                 return pickle.load(fileObj)
         except IOError as e:
             print(e)
             return None
 
+    def __repr__(self):
+        return "Knowledge base size: {}\nOverall: {}\n".format(self.size, self.__root.record)
+
 if __name__ == "__main__":
-    path=r".\model\test.pkl"
-    tree = MCT.loadModel(path)
-    result=MCT.trainMCT(tree, 10000)
-    print("Size of knowledge base: {}\n".format(tree.size))
-    print("#Explitation:{}\n#Exploration:{}\n".format(result[0],result[1]))
-    MCT.saveModel(tree, path)
-    pass
+    path1 = r"../model/test-rule1.pkl"
+    path2 = r"../model/test-rule2.pkl"
+    tree1 = MCT.loadModel(path1)
+    if tree1 is None:
+        tree1 = MCT(sovereignityUponDraw="none")
+    print(tree1)
+    result = MCT.trainMCT(tree1, 10000)
+    print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
+    print(tree1)
+    MCT.saveModel(tree1, path1)
+    tree2 = MCT.loadModel(path2)
+    if tree2 is None:
+        tree2 = MCT(sovereignityUponDraw="both")
+    print(tree2)
+    result = MCT.trainMCT(tree2, 10000)
+    print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
+    print(tree2)
+    MCT.saveModel(tree2, path2)
 

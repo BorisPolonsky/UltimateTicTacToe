@@ -1,8 +1,9 @@
 import pickle
-from UltimateTicTacToe import *
 import time
 import os
 import math
+from ultimate_tic_tac_toe.UltimateTicTacToe import UltimateTicTacToe
+import random
 from enum import Enum,unique
 class MCT:
     class NodeMCT:

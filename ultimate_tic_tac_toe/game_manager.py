@@ -1,5 +1,4 @@
 from ultimate_tic_tac_toe.mcts import MCT
-from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
 
 class GameManager:
     def __init__(self, modelPath):

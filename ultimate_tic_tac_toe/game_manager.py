@@ -8,8 +8,14 @@ class GameManager:
     def playInTerminal(self,side="X", asInitiator=True):
         def outputStream():
             while True:
-                yield tuple(int(ch) for ch in input("rowBlock,columnBlock,rowSlot,columnSlot\n").split(","))
-        inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator)
+                try:
+                    action=tuple(int(ch) for ch in input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\n").split(","))
+                except Exception as e:  # Need to fix it later
+                    print(e)
+                    print("Invalid input.")
+                    continue
+                yield action
+        inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, 50)
         terminal=False
         while terminal==False:
             try:
@@ -18,11 +24,17 @@ class GameManager:
                 print(board)
             except StopIteration:
                 terminal=True
-
+        if board.occupancy == "draw":
+            print("Draw!")
+        elif board.occupancy==side:
+            print("Congratulations! You win! ")
+        else:
+            print("You lose, please try again. ")
 
 if __name__ == "__main__":
     modelPath=r"../model/test-rule1.pkl"
-    GameManager(modelPath).playInTerminal("X", False)
+    game=GameManager(modelPath)
+    game.playInTerminal("X", False)
 
 
 

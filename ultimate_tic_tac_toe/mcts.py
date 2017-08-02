@@ -4,7 +4,7 @@ import os
 import math
 from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
 import random
-from enum import Enum,unique
+from enum import Enum, unique
 import copy
 class MCT:
     class NodeMCT:
@@ -34,12 +34,13 @@ class MCT:
             self.__val=(0,0,0)
             self.__next=[]
 
+        # Need to be checked
         def addChild(self, action):
             node = MCT.NodeMCT(action)
             self.__next.append(node)
             return node
 
-        def update(self,result):
+        def update(self, result):
             if result==MCT.NodeMCT.Result.initiatorWins:
                 self.__val= (self.__val[0]+1, self.__val[1], self.__val[2]+1)
             elif result==MCT.NodeMCT.Result.initiatorLoses:
@@ -48,6 +49,20 @@ class MCT:
                 self.__val= (self.__val[0], self.__val[1], self.__val[2]+1)  # ?
             else:
                 raise ValueError("Invalid result. ")
+
+        def getBestChild(self,isInitiator, c=math.sqrt(2)):
+            if c<0:
+                raise ValueError('Parameter c must be greater or equal to 0. ')
+            children=self.children
+            if isInitiator:
+                scoreNodePairs = [
+                    (node.record[0] / node.record[2] + c * math.sqrt(math.log(self.record[2]) / node.record[2]), node)
+                    for node in children]
+            else:
+                scoreNodePairs = [
+                    (node.record[1] / node.record[2] + c * math.sqrt(math.log(self.record[2]) / node.record[2]), node)
+                    for node in children]
+            return max(scoreNodePairs,key=lambda x:x[0], default=(None, None))[1]
 
         @property
         def children(self):
@@ -114,15 +129,7 @@ class MCT:
                         path.append(currentNode)
                         nExploration+=1
                     else:
-                        if currentSide == initiator:
-                            scores = [node.record[0] / node.record[2] + math.sqrt(
-                                2 * math.log(currentNode.record[2]) / node.record[2]) for node in currentNode.children]
-                        else:
-                            scores = [node.record[1] / node.record[2] + math.sqrt(
-                                2 * math.log(currentNode.record[2]) / node.record[2]) for node in currentNode.children]
-                        scoreNodePairs=zip(scores, currentNode.children)
-                        # Select action with highest score
-                        currentNode=max(scoreNodePairs, key=lambda x:x[0])[1]
+                        currentNode=currentNode.getBestChild(currentSide==initiator)
                         path.append(currentNode)
                         action=currentNode.state
                         nExploitation+=1
@@ -152,7 +159,7 @@ class MCT:
         return nExploitation, nExploration
 
     @classmethod
-    def onlineLearning(cls, model, inputStream, side="X", asInitiator=True):
+    def onlineLearning(cls, model, inputStream, side="X", asInitiator=True, numEvalForEachStep=20):
         """
         :param side: "X" or "O"
         :param asInitiator: bool. True if the input serves as the initiator the game.
@@ -161,11 +168,16 @@ class MCT:
         """
         if side in ["X","O"]:
             opponent="X" if side=="O" else "O"
-        initiatorSide= side if asInitiator else opponent
+        else:
+            raise ValueError('Invalid input for parameter "side", expected "X" or "O", got {}. '.format(side))
+        if numEvalForEachStep<0:
+            raise ValueError('Parameter "numEvalForEachStep" must be greater than 0. ')
+        initiatorSide, defenderSide = (side, opponent) if asInitiator else (opponent, side)
         currentSide=initiatorSide
         terminal=False
         board=UltimateTicTacToe(sovereignityUponDraw=model.ruleSet["sovereignityUponDraw"])
         currentNode=model.__root
+        nodePath=[model.__root]
         while not terminal:
             if currentSide== side:  # The input's turn
                 while True:
@@ -179,15 +191,60 @@ class MCT:
                     else:
                         terminal= board.take(*action, currentSide)
                         break
-                    for node in currentNode.children:
-                        if node.state == action:
-                            currentNode=node
-                        else:
-                            currentNode.addChild(action)
+                for node in currentNode.children:
+                    if node.state == action:
+                        currentNode = node
+                    else:
+                        currentNode = currentNode.addChild(action)
+                    nodePath.append(currentNode)
             else:  # The model's turn
                 # To be fixed
-                action=board.randomAction
-                terminal=board.take(*action, currentSide)
+                for testEpoch in range(10):
+                    testTerminal=False
+                    testCurrentNode = currentNode
+                    testBoard=copy.deepcopy(board)
+                    testCurrentSide=currentSide
+                    # Selection
+                    while not testTerminal:
+                        validActions=testBoard.validActions
+                        exploredActions= [node.state for node in testCurrentNode.children]
+                        actionsToBeExplored=list(set(validActions)-set(exploredActions))
+                        if len(actionsToBeExplored)>0:
+                            action=random.choice(actionsToBeExplored)
+                            testCurrentNode= testCurrentNode.addChild(action)
+                            nodePath.append(testCurrentNode)
+                            testTerminal= testBoard.take(*action, testCurrentSide)
+                            testCurrentSide= testBoard.nextSide
+                            break
+                        else:
+                            testCurrentNode=testCurrentNode.getBestChild(testCurrentSide==initiatorSide)
+                            nodePath.append(testCurrentNode)
+                            action=testCurrentNode.state
+                            testTerminal=testBoard.take(*action, testCurrentSide)
+                            testCurrentSide= testBoard.nextSide
+
+                    # Simulation
+                    while not testTerminal:
+                        action = testBoard.randomAction
+                        testCurrentNode = testCurrentNode.addChild(action)
+                        nodePath.append(testCurrentNode)
+                        testTerminal = testBoard.take(*action,testCurrentSide)
+                        testCurrentSide = testBoard.nextSide
+                    # Back-propagation
+                    occupancy=testBoard.occupancy
+                    if occupancy == "draw":
+                        result=MCT.NodeMCT.Result.draw
+                    elif occupancy == initiatorSide:
+                        result=MCT.NodeMCT.Result.initiatorWins
+                    elif occupancy==defenderSide:
+                        result=MCT.NodeMCT.Result.initiatorLoses
+                    else:
+                        raise ValueError("Invalid occupancy when the game terminates.")
+                    for node in nodePath:
+                        node.update(result)
+                currentNode=currentNode.getBestChild(currentSide==initiatorSide)
+                action = currentNode.state
+                board.take(*action, opponent)
                 yield action, copy.deepcopy(board)
             currentSide="X" if currentSide=="O" else "O"
 
@@ -215,7 +272,7 @@ class MCT:
             print(e)
 
     @classmethod
-    def loadModel(cls,modelPath):
+    def loadModel(cls, modelPath):
         try:
             with open(os.path.normpath(modelPath), "rb") as fileObj:
                 return pickle.load(fileObj)

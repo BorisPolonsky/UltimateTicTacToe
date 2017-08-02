@@ -2,7 +2,7 @@ import pickle
 import time
 import os
 import math
-from ultimate_tic_tac_toe.UltimateTicTacToe import UltimateTicTacToe
+from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
 import random
 from enum import Enum,unique
 class MCT:

@@ -5,6 +5,7 @@ import math
 from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
 import random
 from enum import Enum,unique
+import copy
 class MCT:
     class NodeMCT:
         @unique
@@ -82,7 +83,7 @@ class MCT:
             self.__sovereignityUponDraw = sovereignityUponDraw
 
     @classmethod
-    def trainMCT(cls, tree, epochNum=20):
+    def offlineLearning(cls, tree, epochNum=1000):
         """
         epoch: Total number of game rounds simluated.
         """
@@ -150,6 +151,46 @@ class MCT:
                 node.update(result)
         return nExploitation, nExploration
 
+    @classmethod
+    def onlineLearning(cls, model, inputStream, side="X", asInitiator=True):
+        """
+        :param side: "X" or "O"
+        :param asInitiator: bool. True if the input serves as the initiator the game.
+        :return:
+        Online learning with MCTS.
+        """
+        if side in ["X","O"]:
+            opponent="X" if side=="O" else "O"
+        initiatorSide= side if asInitiator else opponent
+        currentSide=initiatorSide
+        terminal=False
+        board=UltimateTicTacToe(sovereignityUponDraw=model.ruleSet["sovereignityUponDraw"])
+        currentNode=model.__root
+        while not terminal:
+            if currentSide== side:  # The input's turn
+                while True:
+                    try:
+                        action = next(inputStream)
+                    except StopIteration:
+                        raise RuntimeError("Can't receive action from player. ")
+                    if action not in board.validActions:
+                        print("Invalid action. Please try again.")
+                        continue
+                    else:
+                        terminal= board.take(*action, currentSide)
+                        break
+                    for node in currentNode.children:
+                        if node.state == action:
+                            currentNode=node
+                        else:
+                            currentNode.addChild(action)
+            else:  # The model's turn
+                # To be fixed
+                action=board.randomAction
+                terminal=board.take(*action, currentSide)
+                yield action, copy.deepcopy(board)
+            currentSide="X" if currentSide=="O" else "O"
+
     def __addNode(self,parent,action):
         node=parent.addChild(action)
         self.__size+=1
@@ -158,6 +199,10 @@ class MCT:
     @property
     def size(self):
         return self.__size
+
+    @property
+    def ruleSet(self):
+        return {"sovereignityUponDraw":self.__sovereignityUponDraw}
 
     @classmethod
     def saveModel(cls, tree, modelPath):
@@ -188,7 +233,7 @@ if __name__ == "__main__":
     if tree1 is None:
         tree1 = MCT(sovereignityUponDraw="none")
     print(tree1)
-    result = MCT.trainMCT(tree1, 10000)
+    result = MCT.offlineLearning(tree1, 10000)
     print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree1)
     MCT.saveModel(tree1, path1)
@@ -196,7 +241,7 @@ if __name__ == "__main__":
     if tree2 is None:
         tree2 = MCT(sovereignityUponDraw="both")
     print(tree2)
-    result = MCT.trainMCT(tree2, 10000)
+    result = MCT.offlineLearning(tree2, 10000)
     print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree2)
     MCT.saveModel(tree2, path2)

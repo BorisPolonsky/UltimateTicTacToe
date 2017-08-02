@@ -105,10 +105,10 @@ class UltimateTicTacToe():
                     diagonal1=(self.__blocks[0][0].occupancy(),self.__blocks[1][1].occupancy(),self.__blocks[2][2].occupancy())
                     diagonal2=(self.__blocks[2][0].occupancy(),self.__blocks[1][1].occupancy(),self.__blocks[0][2].occupancy())
                     if self.__sovereignityUponDraw=="both":
-                        horizontal=map(lambda x:x if x!="draw" else side, horizontal)
-                        vertical=map(lambda x:x if x!="draw" else side, vertical)
-                        diagonal1=map(lambda x:x if x!="draw" else side, diagonal1)
-                        diagonal2=map(lambda x:x if x!="draw" else side, diagonal2)
+                        horizontal=list(map(lambda x:x if x!="draw" else side, horizontal))
+                        vertical=list(map(lambda x:x if x!="draw" else side, vertical))
+                        diagonal1=list(map(lambda x:x if x!="draw" else side, diagonal1))
+                        diagonal2=list(map(lambda x:x if x!="draw" else side, diagonal2))
                     # Search row, column and diagonal
                     if (horizontal[0]==horizontal[1] and horizontal[1]==horizontal[2])\
                     or (vertical[0]==vertical[1] and vertical[1]==vertical[2])\

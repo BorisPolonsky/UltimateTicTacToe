@@ -279,6 +279,10 @@ class MCT:
     def ruleSet(self):
         return {"sovereignityUponDraw":self.__sovereignityUponDraw}
 
+    @property
+    def knowledgeBrief(self):
+        return self.__root.record
+
     @classmethod
     def saveModel(cls, tree, modelPath):
         if type(tree)!=MCT:

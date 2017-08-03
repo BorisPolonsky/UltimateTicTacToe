@@ -10,9 +10,9 @@ class MCT:
     class NodeMCT:
         @unique
         class Result(Enum):
-            initiatorWins=0
-            initiatorLoses=1
-            draw=2
+            initiatorWins = 0
+            initiatorLoses = 1
+            draw = 2
         def __init__(self, op= None):
             """
             Initialization of a node.
@@ -179,7 +179,7 @@ class MCT:
         currentNode=model.__root
         nodePath=[model.__root]
         while not terminal:
-            if currentSide== side:  # The input's turn
+            if currentSide == side:  # The input's turn
                 while True:
                     try:
                         action = next(inputStream)
@@ -189,7 +189,7 @@ class MCT:
                         print("Invalid action. Please try again.")
                         continue
                     else:
-                        terminal= board.take(*action, currentSide)
+                        terminal = board.take(*action, currentSide)
                         break
                 for node in currentNode.children:
                     if node.state == action:
@@ -199,7 +199,7 @@ class MCT:
                     nodePath.append(currentNode)
             else:  # The model's turn
                 # To be fixed
-                for testEpoch in range(10):
+                for testEpoch in range(100):
                     testTerminal=False
                     testCurrentNode = currentNode
                     testBoard=copy.deepcopy(board)
@@ -249,6 +249,7 @@ class MCT:
                 board.take(*action, opponent)
                 yield action, copy.deepcopy(board)
             currentSide="X" if currentSide=="O" else "O"
+
         # Final back-propagation
         occupancy = board.occupancy
         if occupancy == "draw":
@@ -261,6 +262,10 @@ class MCT:
             raise ValueError("Invalid occupancy when the game terminates.")
         for node in nodePath:
             node.update(result)
+        #  Yield last result if it's the input who ended the game
+        if currentSide == opponent:
+            yield None, board
+
     def __addNode(self,parent,action):
         node=parent.addChild(action)
         self.__size+=1

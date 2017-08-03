@@ -1,4 +1,5 @@
 from ultimate_tic_tac_toe.mcts import MCT
+from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
 
 class GameManager:
     def __init__(self, modelPath):
@@ -15,17 +16,20 @@ class GameManager:
                     continue
                 yield action
         inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, 50)
-        terminal=False
-        while terminal==False:
+        while True:
             try:
                 action, board=next(inputStream)
-                print("The opponent took action {}. ".format(action))
-                print(board)
+                if action is not None:
+                    print("The opponent took action {}. ".format(action))
+                    print(board)
+                else:  # In this case it's the user who ends the game.
+                    print(board)
+                    break
             except StopIteration:
-                terminal=True
+                break
         if board.occupancy == "draw":
             print("Draw!")
-        elif board.occupancy==side:
+        elif board.occupancy == side:
             print("Congratulations! You win! ")
         else:
             print("You lose, please try again. ")

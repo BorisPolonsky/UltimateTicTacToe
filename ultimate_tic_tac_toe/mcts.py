@@ -204,6 +204,7 @@ class MCT:
                     testCurrentNode = currentNode
                     testBoard=copy.deepcopy(board)
                     testCurrentSide=currentSide
+                    testNodePath=[]
                     # Selection
                     while not testTerminal:
                         validActions=testBoard.validActions
@@ -212,13 +213,13 @@ class MCT:
                         if len(actionsToBeExplored)>0:
                             action=random.choice(actionsToBeExplored)
                             testCurrentNode= testCurrentNode.addChild(action)
-                            nodePath.append(testCurrentNode)
+                            testNodePath.append(testCurrentNode)
                             testTerminal= testBoard.take(*action, testCurrentSide)
                             testCurrentSide= testBoard.nextSide
                             break
                         else:
                             testCurrentNode=testCurrentNode.getBestChild(testCurrentSide==initiatorSide)
-                            nodePath.append(testCurrentNode)
+                            testNodePath.append(testCurrentNode)
                             action=testCurrentNode.state
                             testTerminal=testBoard.take(*action, testCurrentSide)
                             testCurrentSide= testBoard.nextSide
@@ -227,11 +228,11 @@ class MCT:
                     while not testTerminal:
                         action = testBoard.randomAction
                         testCurrentNode = testCurrentNode.addChild(action)
-                        nodePath.append(testCurrentNode)
+                        testNodePath.append(testCurrentNode)
                         testTerminal = testBoard.take(*action,testCurrentSide)
                         testCurrentSide = testBoard.nextSide
                     # Back-propagation
-                    occupancy=testBoard.occupancy
+                    occupancy = testBoard.occupancy
                     if occupancy == "draw":
                         result=MCT.NodeMCT.Result.draw
                     elif occupancy == initiatorSide:
@@ -240,14 +241,26 @@ class MCT:
                         result=MCT.NodeMCT.Result.initiatorLoses
                     else:
                         raise ValueError("Invalid occupancy when the game terminates.")
-                    for node in nodePath:
+                    for node in nodePath+testNodePath:
                         node.update(result)
                 currentNode=currentNode.getBestChild(currentSide==initiatorSide)
                 action = currentNode.state
+                nodePath.append(currentNode)
                 board.take(*action, opponent)
                 yield action, copy.deepcopy(board)
             currentSide="X" if currentSide=="O" else "O"
-
+        # Final back-propagation
+        occupancy = board.occupancy
+        if occupancy == "draw":
+            result = MCT.NodeMCT.Result.draw
+        elif occupancy == initiatorSide:
+            result = MCT.NodeMCT.Result.initiatorWins
+        elif occupancy == defenderSide:
+            result = MCT.NodeMCT.Result.initiatorLoses
+        else:
+            raise ValueError("Invalid occupancy when the game terminates.")
+        for node in nodePath:
+            node.update(result)
     def __addNode(self,parent,action):
         node=parent.addChild(action)
         self.__size+=1

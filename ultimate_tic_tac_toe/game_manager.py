@@ -9,7 +9,7 @@ class GameManager:
         def outputStream():
             while True:
                 try:
-                    inputMsg=input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\nNote that the commas can be excluded.\n")
+                    inputMsg=input("Please enter your action with the following form:\nrowBlock,columnBlock,rowSlot,columnSlot\nNote that the commas can be excluded.\n")
                     if "," in inputMsg:
                         action = tuple(int(ch) for ch in inputMsg.split(","))
                     else:
@@ -22,18 +22,18 @@ class GameManager:
         inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, numOfEval)
         while True:
             try:
-                action, score, board = next(inputStream)
+                action, info = next(inputStream)
                 if action is not None:
-                    print("The opponent took action {}. \nScore: {}".format(action, score))
-                    print(board)
+                    print("The opponent took action {}. \nScore: {}\nLog: {}".format(action, info["score"], info["log"]))
+                    print(info["board"])
                 else:  # In this case it's the user who ends the game.
-                    print(board)
+                    print(info["board"])
                     break
             except StopIteration:
                 break
-        if board.occupancy == "draw":
+        if info["board"].occupancy == "draw":
             print("Draw!")
-        elif board.occupancy == side:
+        elif info["board"].occupancy == side:
             print("Congratulations! You win! ")
         else:
             print("You lose, please try again. ")

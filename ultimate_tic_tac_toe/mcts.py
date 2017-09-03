@@ -249,11 +249,11 @@ class MCT:
                 isInitiator = currentSide == initiatorSide
                 bestNode = currentNode.getBestChild(isInitiator)
                 score = MCT.NodeMCT.getScoreOfChild(currentNode, bestNode, isInitiator)
-                currentNode = bestNode  # Update node reference.
+                currentNode = bestNode  # Update node reference
                 action = currentNode.state
                 nodePath.append(currentNode)
                 board.take(*action, opponent)
-                yield action, score, copy.deepcopy(board)
+                yield action, {"board":copy.deepcopy(board), "score": score, "log": currentNode.record}
             currentSide = "X" if currentSide == "O" else "O"
 
         # Final back-propagation
@@ -270,7 +270,7 @@ class MCT:
             node.update(result)
         #  Yield last result if it's the input who ended the game
         if currentSide == opponent:
-            yield None, None, board
+            yield None, {"board": board, "score": score, "log": currentNode.record}
 
     def __addNode(self, parent, action):
         node = parent.addChild(action)

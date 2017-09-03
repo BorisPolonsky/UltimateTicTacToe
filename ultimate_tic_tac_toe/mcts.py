@@ -198,7 +198,7 @@ class MCT:
                     if node.state == action:
                         currentNode = node
                     else:
-                        currentNode = currentNode.addChild(action)
+                        currentNode = model.__addNode(currentNode, action)
                     nodePath.append(currentNode)
             else:  # The model's turn
                 # To be fixed
@@ -215,9 +215,9 @@ class MCT:
                         actionsToBeExplored=list(set(validActions)-set(exploredActions))
                         if len(actionsToBeExplored)>0:
                             action=random.choice(actionsToBeExplored)
-                            testCurrentNode= testCurrentNode.addChild(action)
+                            testCurrentNode = model.__addNode(testCurrentNode, action)
                             testNodePath.append(testCurrentNode)
-                            testTerminal= testBoard.take(*action, testCurrentSide)
+                            testTerminal = testBoard.take(*action, testCurrentSide)
                             testCurrentSide= testBoard.nextSide
                             break
                         else:
@@ -230,9 +230,9 @@ class MCT:
                     # Simulation
                     while not testTerminal:
                         action = testBoard.randomAction
-                        testCurrentNode = testCurrentNode.addChild(action)
+                        testCurrentNode = model.__addNode(testCurrentNode, action)
                         testNodePath.append(testCurrentNode)
-                        testTerminal = testBoard.take(*action,testCurrentSide)
+                        testTerminal = testBoard.take(*action, testCurrentSide)
                         testCurrentSide = testBoard.nextSide
                     # Back-propagation
                     occupancy = testBoard.occupancy
@@ -319,7 +319,7 @@ if __name__ == "__main__":
         tree1 = MCT(sovereignityUponDraw="none")
     print(tree1)
     result = MCT.offlineLearning(tree1, 10000)
-    print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
+    print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree1)
     MCT.saveModel(tree1, path1)
     tree2 = MCT.loadModel(path2)
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         tree2 = MCT(sovereignityUponDraw="both")
     print(tree2)
     result = MCT.offlineLearning(tree2, 10000)
-    print("#Explitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
+    print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree2)
     MCT.saveModel(tree2, path2)
 

@@ -8,7 +8,7 @@ if __name__ == "__main__":
         except Exception: #  might be fixed
             print("Invalid input for rule set. ")
         else:
-            if rule in (1,2):
+            if rule in (1, 2):
                 break
             else:
                 continue

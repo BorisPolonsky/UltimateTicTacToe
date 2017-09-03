@@ -5,17 +5,21 @@ class GameManager:
     def __init__(self, modelPath):
         self.__model = MCT.loadModel(modelPath)
 
-    def playInTerminal(self,side="X", asInitiator=True):
+    def playInTerminal(self, side="X", asInitiator=True, numOfEval=1000):
         def outputStream():
             while True:
                 try:
-                    action = tuple(int(ch) for ch in input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\n").split(","))
+                    inputMsg=input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\nNote that the commas can be excluded.\n")
+                    if "," in inputMsg:
+                        action = tuple(int(ch) for ch in inputMsg.split(","))
+                    else:
+                        action = tuple(int(ch) for ch in inputMsg)
                 except Exception as e:  # Need to fix it later
                     print(e)
                     print("Invalid input.")
                     continue
                 yield action
-        inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, 50)
+        inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, numOfEval)
         while True:
             try:
                 action, score, board = next(inputStream)

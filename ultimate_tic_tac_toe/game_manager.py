@@ -9,7 +9,7 @@ class GameManager:
         def outputStream():
             while True:
                 try:
-                    action=tuple(int(ch) for ch in input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\n").split(","))
+                    action = tuple(int(ch) for ch in input("Please enter your action with the follwing form:\nrowBlock,columnBlock,rowSlot,columnSlot\n").split(","))
                 except Exception as e:  # Need to fix it later
                     print(e)
                     print("Invalid input.")
@@ -18,9 +18,9 @@ class GameManager:
         inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, 50)
         while True:
             try:
-                action, board=next(inputStream)
+                action, score, board = next(inputStream)
                 if action is not None:
-                    print("The opponent took action {}. ".format(action))
+                    print("The opponent took action {}. \nScore: {}".format(action, score))
                     print(board)
                 else:  # In this case it's the user who ends the game.
                     print(board)

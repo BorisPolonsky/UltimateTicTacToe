@@ -13,6 +13,7 @@ class MCT:
             initiatorWins = 0
             initiatorLoses = 1
             draw = 2
+
         def __init__(self, op= None):
             """
             Initialization of a node.
@@ -22,17 +23,17 @@ class MCT:
             #draw=self.__val[2]-self.__val[0]-self.__val[1]
             self.__next: a list of children of the node.
             """
-            if (type(op)==tuple and len(op)==4):
+            if type(op)==tuple and len(op)==4:
                 for val in op:
                     if val not in range(1, 4):
                         raise ValueError("Each entry of the state must be an integer from 1-3")
-                self.__op= op
+                self.__op = op
             elif op is None:
-                self.__op= op
+                self.__op = op
             else:
                 raise TypeError('Parameter "op" must be either None or a tuple of (rowBlock, rowColumn, rowSlot, columnSlot)')
-            self.__val=(0,0,0)
-            self.__next=[]
+            self.__val = (0, 0, 0)
+            self.__next = []
 
         # Need to be checked
         def addChild(self, action):
@@ -41,28 +42,31 @@ class MCT:
             return node
 
         def update(self, result):
-            if result==MCT.NodeMCT.Result.initiatorWins:
-                self.__val= (self.__val[0]+1, self.__val[1], self.__val[2]+1)
-            elif result==MCT.NodeMCT.Result.initiatorLoses:
-                self.__val= (self.__val[0]+1, self.__val[1]+1, self.__val[2]+1)
-            elif result==MCT.NodeMCT.Result.draw:
-                self.__val= (self.__val[0], self.__val[1], self.__val[2]+1)  # ?
+            if result == MCT.NodeMCT.Result.initiatorWins:
+                self.__val = (self.__val[0]+1, self.__val[1], self.__val[2]+1)
+            elif result == MCT.NodeMCT.Result.initiatorLoses:
+                self.__val = (self.__val[0], self.__val[1]+1, self.__val[2]+1)
+            elif result == MCT.NodeMCT.Result.draw:
+                self.__val = (self.__val[0], self.__val[1], self.__val[2]+1)  # ?
             else:
                 raise ValueError("Invalid result. ")
 
-        def getBestChild(self,isInitiator, c=math.sqrt(2)):
-            if c<0:
+        def getBestChild(self, isInitiator, c=math.sqrt(2)):
+            if c < 0:
                 raise ValueError('Parameter c must be greater or equal to 0. ')
-            children=self.children
+            children = self.children
+            scoreNodePairs = [(MCT.NodeMCT.getScoreOfChild(self, node, isInitiator), node) for node in children]
+            bestChild = max(scoreNodePairs, key=lambda x:x[0], default=(None, None))[1]
+            return bestChild
+
+        @classmethod
+        def getScoreOfChild(cls, parentNode, childNode, isInitiator, c=math.sqrt(2)):
             if isInitiator:
-                scoreNodePairs = [
-                    (node.record[0] / node.record[2] + c * math.sqrt(math.log(self.record[2]) / node.record[2]), node)
-                    for node in children]
+                return childNode.record[0] / childNode.record[2] + c * math.sqrt(
+                    math.log(parentNode.record[2]) / childNode.record[2])
             else:
-                scoreNodePairs = [
-                    (node.record[1] / node.record[2] + c * math.sqrt(math.log(self.record[2]) / node.record[2]), node)
-                    for node in children]
-            return max(scoreNodePairs,key=lambda x:x[0], default=(None, None))[1]
+                return childNode.record[1] / childNode.record[2] + c * math.sqrt(
+                    math.log(parentNode.record[2]) / childNode.record[2])
 
         @property
         def children(self):
@@ -100,15 +104,14 @@ class MCT:
     @classmethod
     def offlineLearning(cls, tree, epochNum=1000):
         """
-        epoch: Total number of game rounds simluated.
+        epoch: Total number of game rounds simulated.
         """
         nExploration, nExploitation=0, 0
-        for epoch in range(1,epochNum+1):
+        for epoch in range(1, epochNum+1):
             print("Training epoch: {}".format(epoch))
-            terminal=False
+            terminal = False
             currentNode=tree.__root
-            initiator, opponent="X", "O"
-
+            initiator, opponent = "X", "O"
             currentSide=initiator
             board=UltimateTicTacToe(sovereignityUponDraw=tree.__sovereignityUponDraw)
             stage=MCT.Stage.selection
@@ -159,7 +162,7 @@ class MCT:
         return nExploitation, nExploration
 
     @classmethod
-    def onlineLearning(cls, model, inputStream, side="X", asInitiator=True, numEvalForEachStep=20):
+    def onlineLearning(cls, model, inputStream, side="X", asInitiator=True, numEvalForEachStep=1000):
         """
         :param side: "X" or "O"
         :param asInitiator: bool. True if the input serves as the initiator the game.
@@ -199,7 +202,7 @@ class MCT:
                     nodePath.append(currentNode)
             else:  # The model's turn
                 # To be fixed
-                for testEpoch in range(100):
+                for testEpoch in range(numEvalForEachStep):
                     testTerminal=False
                     testCurrentNode = currentNode
                     testBoard=copy.deepcopy(board)
@@ -237,18 +240,21 @@ class MCT:
                         result=MCT.NodeMCT.Result.draw
                     elif occupancy == initiatorSide:
                         result=MCT.NodeMCT.Result.initiatorWins
-                    elif occupancy==defenderSide:
+                    elif occupancy == defenderSide:
                         result=MCT.NodeMCT.Result.initiatorLoses
                     else:
                         raise ValueError("Invalid occupancy when the game terminates.")
                     for node in nodePath+testNodePath:
                         node.update(result)
-                currentNode=currentNode.getBestChild(currentSide==initiatorSide)
+                isInitiator = currentSide == initiatorSide
+                bestNode = currentNode.getBestChild(isInitiator)
+                score = MCT.NodeMCT.getScoreOfChild(currentNode, bestNode, isInitiator)
+                currentNode = bestNode  # Update node reference.
                 action = currentNode.state
                 nodePath.append(currentNode)
                 board.take(*action, opponent)
-                yield action, copy.deepcopy(board)
-            currentSide="X" if currentSide=="O" else "O"
+                yield action, score, copy.deepcopy(board)
+            currentSide = "X" if currentSide == "O" else "O"
 
         # Final back-propagation
         occupancy = board.occupancy
@@ -264,11 +270,11 @@ class MCT:
             node.update(result)
         #  Yield last result if it's the input who ended the game
         if currentSide == opponent:
-            yield None, board
+            yield None, None, board
 
-    def __addNode(self,parent,action):
-        node=parent.addChild(action)
-        self.__size+=1
+    def __addNode(self, parent, action):
+        node = parent.addChild(action)
+        self.__size += 1
         return node
 
     @property
@@ -288,7 +294,7 @@ class MCT:
         if type(tree)!=MCT:
             raise TypeError("Invalid type of tree")
         try:
-            with open(os.path.normpath(modelPath),"wb") as fileObj:
+            with open(os.path.normpath(modelPath), "wb") as fileObj:
                 pickle.dump(tree,fileObj)
         except IOError as e:
             print(e)

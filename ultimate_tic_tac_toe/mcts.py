@@ -140,7 +140,7 @@ class MCT:
                     terminal=board.take(*action, currentSide)
 
                 elif stage == MCT.Stage.simulation:
-                    action= board.randomAction
+                    action = board.randomAction
                     currentNode=tree.__addNode(currentNode, action)
                     print("Taking action {}".format(action))
                     terminal=board.take(*action, currentSide)
@@ -178,7 +178,7 @@ class MCT:
         initiatorSide, defenderSide = (side, opponent) if asInitiator else (opponent, side)
         currentSide=initiatorSide
         terminal=False
-        board=UltimateTicTacToe(sovereignityUponDraw=model.ruleSet["sovereignityUponDraw"])
+        board = UltimateTicTacToe(sovereignityUponDraw=model.ruleSet["sovereignityUponDraw"])
         currentNode=model.__root
         nodePath=[model.__root]
         while not terminal:
@@ -252,7 +252,7 @@ class MCT:
                 currentNode = bestNode  # Update node reference
                 action = currentNode.state
                 nodePath.append(currentNode)
-                board.take(*action, opponent)
+                terminal = board.take(*action, opponent)
                 yield action, {"board":copy.deepcopy(board), "score": score, "log": currentNode.record}
             currentSide = "X" if currentSide == "O" else "O"
 
@@ -283,7 +283,7 @@ class MCT:
 
     @property
     def ruleSet(self):
-        return {"sovereignityUponDraw":self.__sovereignityUponDraw}
+        return {"sovereignityUponDraw": self.__sovereignityUponDraw}
 
     @property
     def knowledgeBrief(self):
@@ -312,13 +312,13 @@ class MCT:
         return "Knowledge base size: {}\nOverall: {}\n".format(self.size, self.__root.record)
 
 if __name__ == "__main__":
-    path1 = r"../model/test-rule1.pkl"
-    path2 = r"../model/test-rule2.pkl"
+    path1 = r"../model/normal.pkl"
+    path2 = r"../model/bizarre.pkl"
     tree1 = MCT.loadModel(path1)
     if tree1 is None:
         tree1 = MCT(sovereignityUponDraw="none")
     print(tree1)
-    result = MCT.offlineLearning(tree1, 10000)
+    result = MCT.offlineLearning(tree1, 0)
     print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree1)
     MCT.saveModel(tree1, path1)
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     if tree2 is None:
         tree2 = MCT(sovereignityUponDraw="both")
     print(tree2)
-    result = MCT.offlineLearning(tree2, 10000)
+    result = MCT.offlineLearning(tree2, 0)
     print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree2)
     MCT.saveModel(tree2, path2)

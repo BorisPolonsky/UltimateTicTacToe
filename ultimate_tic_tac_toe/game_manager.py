@@ -38,7 +38,7 @@ class GameManager:
         else:
             print("You lose, please try again. ")
         if learn:
-            print("Saving new model...")
+            print("Saving new model, please DON'T terminate the program...")
             MCT.saveModel(self.__model)
             print("Complete!")
 

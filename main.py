@@ -42,4 +42,5 @@ if __name__ == "__main__":
             break
         else:
             print('The expected input is enter either O or X, got "{}"'.format(result))
-    game.playInTerminal(side, asInitiator)
+    game.playInTerminal(side, asInitiator, conf.getint("game_config", "computational_cost"),
+                        conf.getboolean("game_config", "update_model_after_each_round"))

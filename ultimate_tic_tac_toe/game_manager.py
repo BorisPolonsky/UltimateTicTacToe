@@ -5,7 +5,7 @@ class GameManager:
     def __init__(self, modelPath):
         self.__model = MCT.loadModel(modelPath)
 
-    def playInTerminal(self, side="X", asInitiator=True, numOfEval=1000):
+    def playInTerminal(self, side="X", asInitiator=True, numOfEval=1000, learn=False):
         def outputStream():
             while True:
                 try:
@@ -37,10 +37,14 @@ class GameManager:
             print("Congratulations! You win! ")
         else:
             print("You lose, please try again. ")
+        if learn:
+            print("Saving new model...")
+            MCT.saveModel(self.__model)
+            print("Complete!")
 
 if __name__ == "__main__":
-    modelPath=r"../model/test-rule1.pkl"
-    game=GameManager(modelPath)
+    modelPath = r"../model/bizarre.pkl"
+    game = GameManager(modelPath)
     game.playInTerminal("X", False)
 
 

@@ -4,5 +4,5 @@ model_name_normal_rule=normal.pkl
 model_name_bizarre_rule=bizarre.pkl
 
 [game_config]
-computational_cost=20000
-update_model_after_each_round=True
+computational_cost=2000
+update_model_after_each_round=False

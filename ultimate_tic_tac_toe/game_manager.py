@@ -20,7 +20,7 @@ class GameManager:
                     print("Invalid input.")
                     continue
                 yield action
-        input_stream = MCT.onlineLearning(self._model, output_stream(), side, as_initiator, num_of_eval)
+        input_stream = MCT.online_learning(self._model, output_stream(), side, as_initiator, num_of_eval)
         while True:
             try:
                 action, info = next(input_stream)

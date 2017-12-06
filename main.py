@@ -52,7 +52,7 @@ def train(args, config_parser):
                           "bizarre": config_parser.get("model_config", "model_name_bizarre_rule")}
     model_path = os.path.normpath(os.path.join(config_parser.get("model_config", "model_dir"), model_name_mapping[args.rule]))
     tree = MCT.load_model(model_path)
-    result = MCT.offlineLearning(tree, args.epoch)
+    result = MCT.offline_learning(tree, args.epoch)
     print("#Exploitation: {}\n#Exploration: {}\n".format(*result))
     print(tree)
     MCT.save_model(tree, model_path)

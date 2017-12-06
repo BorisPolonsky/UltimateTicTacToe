@@ -290,7 +290,7 @@ class MCT:
         return self.__root.record
 
     @classmethod
-    def saveModel(cls, tree, modelPath):
+    def save_model(cls, tree, modelPath):
         if type(tree)!=MCT:
             raise TypeError("Invalid type of tree")
         try:
@@ -300,7 +300,7 @@ class MCT:
             print(e)
 
     @classmethod
-    def loadModel(cls, modelPath):
+    def load_model(cls, modelPath):
         try:
             with open(os.path.normpath(modelPath), "rb") as fileObj:
                 return pickle.load(fileObj)
@@ -314,20 +314,20 @@ class MCT:
 if __name__ == "__main__":
     path1 = r"../model/normal.pkl"
     path2 = r"../model/bizarre.pkl"
-    tree1 = MCT.loadModel(path1)
+    tree1 = MCT.load_model(path1)
     if tree1 is None:
         tree1 = MCT(sovereignityUponDraw="none")
     print(tree1)
     result = MCT.offlineLearning(tree1, 0)
     print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree1)
-    MCT.saveModel(tree1, path1)
-    tree2 = MCT.loadModel(path2)
+    MCT.save_model(tree1, path1)
+    tree2 = MCT.load_model(path2)
     if tree2 is None:
         tree2 = MCT(sovereignityUponDraw="both")
     print(tree2)
     result = MCT.offlineLearning(tree2, 0)
     print("#Exploitation:{}\n#Exploration:{}\n".format(result[0], result[1]))
     print(tree2)
-    MCT.saveModel(tree2, path2)
+    MCT.save_model(tree2, path2)
 

@@ -1,28 +1,29 @@
 from ultimate_tic_tac_toe.mcts import MCT
-from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
+
 
 class GameManager:
-    def __init__(self, modelPath):
-        self.__model = MCT.loadModel(modelPath)
+    def __init__(self, model_path):
+        self._model = MCT.load_model(model_path)
+        self._model_path = model_path
 
-    def playInTerminal(self, side="X", asInitiator=True, numOfEval=1000, learn=False):
-        def outputStream():
+    def play_in_terminal(self, side="X", as_initiator=True, num_of_eval=1000, learn=False):
+        def output_stream():
             while True:
                 try:
-                    inputMsg=input("Please enter your action with the following form:\nrowBlock,columnBlock,rowSlot,columnSlot\nNote that the commas can be excluded.\n")
-                    if "," in inputMsg:
-                        action = tuple(int(ch) for ch in inputMsg.split(","))
+                    input_msg = input("Please enter your action with the following form:\nrowBlock,columnBlock,rowSlot,columnSlot\nNote that the commas can be excluded.\n")
+                    if "," in input_msg:
+                        action = tuple(int(ch) for ch in input_msg.split(","))
                     else:
-                        action = tuple(int(ch) for ch in inputMsg)
+                        action = tuple(int(ch) for ch in input_msg)
                 except Exception as e:  # Need to fix it later
                     print(e)
                     print("Invalid input.")
                     continue
                 yield action
-        inputStream=MCT.onlineLearning(self.__model, outputStream(), side, asInitiator, numOfEval)
+        input_stream = MCT.onlineLearning(self._model, output_stream(), side, as_initiator, num_of_eval)
         while True:
             try:
-                action, info = next(inputStream)
+                action, info = next(input_stream)
                 if action is not None:
                     print("The opponent took action {}. \nScore: {}\nLog: {}".format(action, info["score"], info["log"]))
                     print(info["board"])
@@ -39,13 +40,14 @@ class GameManager:
             print("You lose, please try again. ")
         if learn:
             print("Saving new model, please DON'T terminate the program...")
-            MCT.saveModel(self.__model)
+            MCT.save_model(self._model, self._model_path)
             print("Complete!")
 
+
 if __name__ == "__main__":
-    modelPath = r"../model/bizarre.pkl"
-    game = GameManager(modelPath)
-    game.playInTerminal("X", False)
+    model_path = r"../model/bizarre.pkl"
+    game = GameManager(model_path)
+    game.play_in_terminal("X", False)
 
 
 

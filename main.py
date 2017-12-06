@@ -43,19 +43,19 @@ def lets_play(config_parser):
             break
         else:
             print('The expected input is enter either O or X, got "{}"'.format(result))
-    game.playInTerminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
-                        config_parser.getboolean("game_config", "update_model_after_each_round"))
+    game.play_in_terminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
+                          config_parser.getboolean("game_config", "update_model_after_each_round"))
 
 
 def train(args, config_parser):
     model_name_mapping = {"normal": config_parser.get("model_config", "model_name_normal_rule"),
                           "bizarre": config_parser.get("model_config", "model_name_bizarre_rule")}
     model_path = os.path.normpath(os.path.join(config_parser.get("model_config", "model_dir"), model_name_mapping[args.rule]))
-    tree = MCT.loadModel(model_path)
+    tree = MCT.load_model(model_path)
     result = MCT.offlineLearning(tree, args.epoch)
     print("#Exploitation: {}\n#Exploration: {}\n".format(*result))
     print(tree)
-    MCT.saveModel(tree, model_path)
+    MCT.save_model(tree, model_path)
 
 
 if __name__ == "__main__":

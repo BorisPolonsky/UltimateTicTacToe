@@ -65,7 +65,7 @@ def train(args, config_parser):
                           "bizarre": config_parser.get("model_config", "model_name_bizarre_rule")}
     model_path = os.path.normpath(os.path.join(config_parser.get("model_config", "model_dir"), model_name_mapping[args.rule]))
     tree = MCT.load_model(model_path)
-    result = MCT.offline_learning(tree, args.epoch)
+    result = MCT.offline_learning(tree, args.epoch, args.verbose)
     print("#Exploitation: {}\n#Exploration: {}\n".format(*result))
     print(tree)
     MCT.save_model(tree, model_path)
@@ -78,6 +78,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("--train", action="store_true", default=False, help="Specify this to train the model. ")
     arg_parser.add_argument("--rule", action="store", type=str, help='Could be either "normal" or "bizarre". ')
     arg_parser.add_argument("--epoch", action="store", type=int, help="Specify the number of epochs in training. ")
+    arg_parser.add_argument("--verbose", action="store", type=int, default=1,
+                            help="Specify the verbosity level in training. ")
     args = arg_parser.parse_args()
     if not args.train:
         lets_play(config_parser)

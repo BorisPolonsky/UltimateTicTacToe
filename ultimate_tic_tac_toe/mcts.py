@@ -104,16 +104,18 @@ class MCT:
             self._sovereignty_upon_draw = sovereignty_upon_draw
 
     @classmethod
-    def offline_learning(cls, tree, epoch_num=1000):
+    def offline_learning(cls, tree, epoch_num=1000, verbose=0):
         """
         Self-training without opponent.
         :param tree: An MCT object. The tree to be trained.
         :param epoch_num: Total number of game rounds to be simulated.
-        :return:
+        :param verbose: A parameter for controlling verbosity level of console output.
+        :return: n_exploitation, n_exploration
         """
         n_exploration, n_exploitation = 0, 0
-        for epoch in range(1, epoch_num+1):
-            print("Training epoch: {}".format(epoch))
+        for epoch in range(1, epoch_num + 1):
+            if verbose >= 1:
+                print("Training epoch {} in a total of {}: ".format(epoch, epoch_num))
             terminal = False
             current_node = tree._root
             initiator, opponent = "X", "O"
@@ -122,7 +124,8 @@ class MCT:
             stage = MCT.Stage.selection
             path = [current_node]
             while not terminal:
-                print(board)
+                if verbose >= 2:
+                    print(board)
                 # Selection
                 if stage == MCT.Stage.selection:
                     explored_actions = [node.state for node in current_node.children]
@@ -141,13 +144,15 @@ class MCT:
                         path.append(current_node)
                         action = current_node.state
                         n_exploitation += 1
-                    print("Taking action {}".format(action))
+                    if verbose >= 2:
+                        print("Taking action {}.".format(action))
                     terminal = board.take(*action, current_side)
 
                 elif stage == MCT.Stage.simulation:
                     action = board.random_action
                     current_node = tree._add_node(current_node, action)
-                    print("Taking action {}".format(action))
+                    if verbose >= 2:
+                        print("Taking action {}.".format(action))
                     terminal = board.take(*action, current_side)
                     path.append(current_node)
                     n_exploration += 1

@@ -23,28 +23,41 @@ def lets_play(config_parser):
     print("Loading model...")
     game = game_manager.GameManager(model_path)
     print("Done!")
-    while True:
-        result = input(r"Do you want to play as initiator?[Y/N]")
-        if result == "Y" or result == "y":
-            as_initiator = True
-            break
-        elif result == "N" or result == "n":
-            as_initiator = False
-            break
-        else:
-            print('The expected input is enter either Y or N, got "{}"'.format(result))
-    while True:
-        result = input(r"Which side do you want to play as?[O/X]")
-        if result == "O" or result == "o":
-            side = "O"
-            break
-        elif result == "X" or result == "x":
-            side = "X"
-            break
-        else:
-            print('The expected input is enter either O or X, got "{}"'.format(result))
-    game.play_in_terminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
-                          config_parser.getboolean("game_config", "update_model_after_each_round"))
+    time_to_say_goodbye = False
+    while not time_to_say_goodbye:
+        while True:
+            result = input(r"Do you want to play as initiator?[Y/N]").strip().lower()
+            if result == "y":
+                as_initiator = True
+                break
+            elif result == "n":
+                as_initiator = False
+                break
+            else:
+                print('The expected input is enter either Y or N, got "{}"'.format(result))
+        while True:
+            result = input(r"Which side do you want to play as?[O/X]").strip().lower()
+            if result == "o":
+                side = "O"
+                break
+            elif result == "x":
+                side = "X"
+                break
+            else:
+                print('The expected input is enter either O or X, got "{}"'.format(result))
+        game.play_in_terminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
+                              config_parser.getboolean("game_config", "update_model_after_each_round"))
+        while True:
+            restart_request = input("Start another round?[Y/n]").strip().lower()
+            if restart_request == "y":
+                print("Let's try again! ")
+                break
+            elif restart_request == "n":
+                time_to_say_goodbye = True
+                print("Bye! ")
+                break
+            else:
+                print("Unrecognized input, please try again. ")
 
 
 def train(args, config_parser):

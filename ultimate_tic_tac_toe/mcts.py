@@ -215,7 +215,7 @@ class MCT:
                     node_path.append(current_node)
             else:  # The model's turn
                 # To be fixed
-                for testEpoch in range(num_eval_for_each_step):
+                for test_epoch in range(num_eval_for_each_step):
                     test_terminal = False
                     test_current_node = current_node
                     test_board = copy.deepcopy(board)
@@ -225,7 +225,7 @@ class MCT:
                     while not test_terminal:
                         valid_actions = test_board.valid_actions
                         explored_actions = [node.state for node in test_current_node.children]
-                        actions_to_be_explored = list(set(valid_actions)-set(explored_actions))
+                        actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
                         if len(actions_to_be_explored) > 0:
                             action = random.choice(actions_to_be_explored)
                             test_current_node = model._add_node(test_current_node, action)
@@ -307,16 +307,16 @@ class MCT:
         if type(tree) != MCT:
             raise TypeError("Invalid type of tree")
         try:
-            with open(os.path.normpath(model_path), "wb") as fileObj:
-                pickle.dump(tree, fileObj)
+            with open(os.path.normpath(model_path), "wb") as f:
+                pickle.dump(tree, f)
         except IOError as e:
             print(e)
 
     @classmethod
     def load_model(cls, model_path):
         try:
-            with open(os.path.normpath(model_path), "rb") as fileObj:
-                return pickle.load(fileObj)
+            with open(os.path.normpath(model_path), "rb") as f:
+                return pickle.load(f)
         except IOError as e:
             print(e)
             return None

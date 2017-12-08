@@ -20,9 +20,9 @@ def lets_play(config_parser):
     model_name_mapping = (config_parser.get("model_config", "model_name_normal_rule"),
                           config_parser.get("model_config", "model_name_bizarre_rule"))
     model_path = os.path.normpath(os.path.join(config_parser.get("model_config", "model_dir"), model_name_mapping[rule - 1]))
-    print("Loading model...")
+    print("Loading model ({} KiB)... ".format("%.2f" % (os.path.getsize(model_path)/1024)))
     game = game_manager.GameManager(model_path)
-    print("Done!")
+    print("Done! ")
     time_to_say_goodbye = False
     while not time_to_say_goodbye:
         while True:
@@ -45,8 +45,11 @@ def lets_play(config_parser):
                 break
             else:
                 print('The expected input is enter either O or X, got "{}"'.format(result))
-        game.play_in_terminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
+        try:
+            game.play_in_terminal(side, as_initiator, config_parser.getint("game_config", "computational_cost"),
                               config_parser.getboolean("game_config", "update_model_after_each_round"))
+        except KeyboardInterrupt:
+            print("Game aborted. ")
         while True:
             restart_request = input("Start another round?[Y/n]").strip().lower()
             if restart_request == "y":
@@ -82,6 +85,12 @@ if __name__ == "__main__":
                             help="Specify the verbosity level in training. ")
     args = arg_parser.parse_args()
     if not args.train:
-        lets_play(config_parser)
+        try:
+            lets_play(config_parser)
+        except KeyboardInterrupt:
+            print("Shutting down program. ")
     else:
-        train(args, config_parser)
+        try:
+            train(args, config_parser)
+        except KeyboardInterrupt:
+            print("Aborting... ")

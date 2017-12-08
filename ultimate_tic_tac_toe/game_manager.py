@@ -10,7 +10,7 @@ class GameManager:
         def output_stream():
             while True:
                 input_msg = input(
-                    "Please enter your action with the following form:\n" +
+                    "Please enter your action in the following form:\n" +
                     "row_block, column_block, row_slot, column_slot\n" +
                     "Note that the commas can be excluded.\n")
                 try:

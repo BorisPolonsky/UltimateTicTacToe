@@ -1,4 +1,5 @@
 from ultimate_tic_tac_toe.mcts import MCT
+from ultimate_tic_tac_toe.game_board import BoardState
 
 
 class GameManager:
@@ -6,7 +7,7 @@ class GameManager:
         self._model = MCT.load_model(model_path)
         self._model_path = model_path
 
-    def play_in_terminal(self, side="X", as_initiator=True, num_of_eval=1000, learn=False):
+    def play_in_terminal(self, user_token="X", as_initiator=True, num_of_eval=1000, learn=False):
         def output_stream():
             while True:
                 input_msg = input(
@@ -23,24 +24,28 @@ class GameManager:
                     print(e)
                     print("Invalid input.")
                     continue
+                action = tuple(map(lambda x: x - 1, action))
                 yield action
-        input_stream = MCT.online_learning(self._model, output_stream(), side, as_initiator, num_of_eval)
+        assert user_token in "O", "X"
+        ai_token = "O" if user_token == "X" else "X"
+        token1, token2 = (user_token, ai_token) if as_initiator else (ai_token, user_token)
+        input_stream = MCT.online_learning(self._model, output_stream(), as_initiator, num_of_eval)
         round_complete = False
         while not round_complete:
             try:
                 action, info = next(input_stream)
                 if action is not None:
-                    print("The opponent took action {}. \nScore: {}\nLog: {}".format(action,
-                                                                                     info["score"], info["log"]))
-                    print(info["board"])
+                    print("The opponent took action {}. \nScore: {}\nLog: {}".format(tuple(map(lambda x: x + 1, action)),
+                          info["score"], info["log"]))
+                    print(info["board"].as_str(token1=token1, token2=token2))
                 else:  # In this case it's the user who ends the game.
-                    print(info["board"])
+                    print(info["board"].as_str(token1=token1, token2=token2))
                     round_complete = True
             except StopIteration:
                 round_complete = True
-        if info["board"].occupancy == "draw":
+        if info["board"].occupancy == BoardState.DRAW:
             print("Draw!")
-        elif info["board"].occupancy == side:
+        elif as_initiator and (info["board"].occupancy == BoardState.OCCUPIED_BY_PLAYER1):
             print("Congratulations! You win! ")
         else:
             print("You lose, please try again. ")
@@ -54,6 +59,3 @@ if __name__ == "__main__":
     model_path = r"../model/bizarre.pkl"
     game = GameManager(model_path)
     game.play_in_terminal("X", False)
-
-
-

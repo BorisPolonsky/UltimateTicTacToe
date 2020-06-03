@@ -2,7 +2,7 @@ import pickle
 import time
 import os
 import math
-from ultimate_tic_tac_toe.game_board import UltimateTicTacToe
+from ultimate_tic_tac_toe.game_board import UltimateTicTacToe, BoardState, SlotState
 import random
 from enum import Enum, unique
 import copy
@@ -27,7 +27,7 @@ class MCT:
             """
             if type(op) == tuple and len(op) == 4:
                 for val in op:
-                    if val not in range(1, 4):
+                    if val not in range(3):
                         raise ValueError("Each entry of the state must be an integer from 1-3")
                 self._op = op
             elif op is None:
@@ -44,14 +44,15 @@ class MCT:
             return node
 
         def update(self, result):
+            n_victory, n_loss, n_total = self._val
             if result == MCT.NodeMCT.Result.the_initiator_wins:
-                self._val = (self._val[0] + 1, self._val[1], self._val[2] + 1)
+                self._val = (n_victory + 1, n_loss, n_total + 1)
             elif result == MCT.NodeMCT.Result.the_initiator_loses:
-                self._val = (self._val[0], self._val[1] + 1, self._val[2] + 1)
+                self._val = (n_victory, n_loss + 1, n_total + 1)
             elif result == MCT.NodeMCT.Result.draw:
-                self._val = (self._val[0], self._val[1], self._val[2] + 1)  # ?
+                self._val = (n_victory, n_loss, n_total + 1)
             else:
-                raise ValueError("Invalid result. ")
+                raise ValueError("Invalid result.")
 
         def get_best_child(self, is_initiator, c=math.sqrt(2)):
             if c < 0:
@@ -172,30 +173,26 @@ class MCT:
         return n_exploitation, n_exploration
 
     @classmethod
-    def online_learning(cls, model, input_stream, side="X", as_initiator=True, num_eval_for_each_step=1000):
+    def online_learning(cls, model, input_stream, as_initiator=True, num_eval_for_each_step=1000):
         """
         Online learning with MCTS.
-        :param side: "X" or "O"
         :param as_initiator: bool. True if the input serves as the initiator the game.
         :param num_eval_for_each_step: Number action evaluation for each step.
         :return: (action_of_AI, action_info)
         action_of_AI: the coordinate of the slot that the AI just took. None if the game is terminated.
         action_info: Some information for describing the action for debug purposes.
         """
-        if side in ("X", "O"):
-            opponent = "X" if side == "O" else "O"
-        else:
-            raise ValueError('Invalid input for parameter "side", expected "X" or "O", got {}. '.format(side))
+        initiator, defender = SlotState.PLAYER1, SlotState.PLAYER2
+        user_side, ai_side = (initiator, defender) if as_initiator else (defender, initiator)
         if num_eval_for_each_step < 0:
             raise ValueError('Parameter "num_eval_for_each_step" must be greater than 0. ')
-        initiator_side, defender_side = (side, opponent) if as_initiator else (opponent, side)
-        current_side = initiator_side
+        current_side = initiator
         terminal = False
         board = UltimateTicTacToe(sovereignty_upon_draw=model.rule_set["sovereignty_upon_draw"])
         current_node = model._root
         node_path = [model._root]
         while not terminal:
-            if current_side == side:  # The input's turn
+            if current_side == user_side:  # The user's turn
                 while True:
                     try:
                         action = next(input_stream)
@@ -218,7 +215,7 @@ class MCT:
                 for test_epoch in range(num_eval_for_each_step):
                     test_terminal = False
                     test_current_node = current_node
-                    test_board = copy.deepcopy(board)
+                    test_board = copy.deepcopy(board) # To be optimized
                     test_current_side = current_side
                     test_node_path = []
                     # Selection
@@ -234,7 +231,7 @@ class MCT:
                             test_current_side = test_board.next_side
                             break
                         else:
-                            test_current_node = test_current_node.get_best_child(test_current_side == initiator_side)
+                            test_current_node = test_current_node.get_best_child(test_current_side == initiator)
                             test_node_path.append(test_current_node)
                             action = test_current_node.state
                             test_terminal = test_board.take(*action, test_current_side)
@@ -251,31 +248,31 @@ class MCT:
                     occupancy = test_board.occupancy
                     if occupancy == "draw":
                         result = MCT.NodeMCT.Result.draw
-                    elif occupancy == initiator_side:
+                    elif occupancy == initiator:
                         result = MCT.NodeMCT.Result.the_initiator_wins
-                    elif occupancy == defender_side:
+                    elif occupancy == defender:
                         result = MCT.NodeMCT.Result.the_initiator_loses
                     else:
                         raise ValueError("Invalid occupancy when the game terminates.")
                     for node in node_path+test_node_path:
                         node.update(result)
-                is_initiator = current_side == initiator_side
+                is_initiator = current_side == initiator
                 best_node = current_node.get_best_child(is_initiator)
                 score = MCT.NodeMCT.get_score_of_child(current_node, best_node, is_initiator)
                 current_node = best_node  # Update node reference
                 action = current_node.state
                 node_path.append(current_node)
-                terminal = board.take(*action, opponent)
+                terminal = board.take(*action, ai_side)
                 yield action, {"board": copy.deepcopy(board), "score": score, "log": current_node.record}
-            current_side = "X" if current_side == "O" else "O"
+            current_side = SlotState.PLAYER1 if current_side == SlotState.PLAYER2 else SlotState.PLAYER2
 
         # Final back-propagation
         occupancy = board.occupancy
         if occupancy == "draw":
             result = MCT.NodeMCT.Result.draw
-        elif occupancy == initiator_side:
+        elif occupancy == initiator:
             result = MCT.NodeMCT.Result.the_initiator_wins
-        elif occupancy == defender_side:
+        elif occupancy == defender:
             result = MCT.NodeMCT.Result.the_initiator_loses
         else:
             raise ValueError("Invalid occupancy when the game terminates.")

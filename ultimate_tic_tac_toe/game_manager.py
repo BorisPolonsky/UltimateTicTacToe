@@ -3,11 +3,11 @@ from ultimate_tic_tac_toe.game_board import BoardState
 
 
 class GameManager:
-    def __init__(self, model_path):
+    def __init__(self, model_path: str):
         self._model = MCT.load_model(model_path)
         self._model_path = model_path
 
-    def play_in_terminal(self, user_token="X", as_initiator=True, num_of_eval=1000, learn=False):
+    def play_in_terminal(self, user_token: str = "X", as_initiator: bool = True, num_of_eval: int = 1000, learn: bool = False):
         def output_stream():
             while True:
                 input_msg = input(

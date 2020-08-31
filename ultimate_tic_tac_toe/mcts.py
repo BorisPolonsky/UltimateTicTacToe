@@ -5,7 +5,7 @@ import math
 from ultimate_tic_tac_toe.game_board import UltimateTicTacToe, BoardState, SlotState
 import random
 from enum import Enum, unique
-import copy
+from typing import Tuple, Iterable
 
 
 class MCT:
@@ -98,7 +98,7 @@ class MCT:
         self._root = MCT.NodeMCT()
         self._size = 0
         try:
-            UltimateTicTacToe(sovereignty_upon_draw=sovereignty_upon_draw)
+            UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=sovereignty_upon_draw)
         except Exception as e:
             raise e
         else:
@@ -121,7 +121,7 @@ class MCT:
             current_node = tree._root
             initiator, opponent = "X", "O"
             current_side = initiator
-            board = UltimateTicTacToe(sovereignty_upon_draw=tree._sovereignty_upon_draw)
+            board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=tree._sovereignty_upon_draw)
             stage = MCT.Stage.selection
             path = [current_node]
             while not terminal:
@@ -150,7 +150,7 @@ class MCT:
                     terminal = board.take(*action, current_side)
 
                 elif stage == MCT.Stage.simulation:
-                    action = board.random_action
+                    action = board.random_action()
                     current_node = tree._add_node(current_node, action)
                     if verbose >= 2:
                         print("Taking action {}.".format(action))
@@ -173,9 +173,14 @@ class MCT:
         return n_exploitation, n_exploration
 
     @classmethod
-    def online_learning(cls, model, input_stream, as_initiator=True, num_eval_for_each_step=1000):
+    def online_learning(cls, model,
+                        input_stream: Iterable[Tuple[int, int, int, int]],
+                        as_initiator=True,
+                        num_eval_for_each_step=1000):
         """
         Online learning with MCTS.
+        :param model
+        :param input_stream
         :param as_initiator: bool. True if the input serves as the initiator the game.
         :param num_eval_for_each_step: Number action evaluation for each step.
         :return: (action_of_AI, action_info)
@@ -188,7 +193,7 @@ class MCT:
             raise ValueError('Parameter "num_eval_for_each_step" must be greater than 0. ')
         current_side = initiator
         terminal = False
-        board = UltimateTicTacToe(sovereignty_upon_draw=model.rule_set["sovereignty_upon_draw"])
+        board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=model.rule_set["sovereignty_upon_draw"])
         current_node = model._root
         node_path = [model._root]
         while not terminal:
@@ -215,7 +220,7 @@ class MCT:
                 for test_epoch in range(num_eval_for_each_step):
                     test_terminal = False
                     test_current_node = current_node
-                    test_board = copy.deepcopy(board) # To be optimized
+                    test_board = board.copy()
                     test_current_side = current_side
                     test_node_path = []
                     # Selection
@@ -239,14 +244,14 @@ class MCT:
 
                     # Simulation
                     while not test_terminal:
-                        action = test_board.random_action
+                        action = test_board.random_action()
                         test_current_node = model._add_node(test_current_node, action)
                         test_node_path.append(test_current_node)
                         test_terminal = test_board.take(*action, test_current_side)
                         test_current_side = test_board.next_side
                     # Back-propagation
                     occupancy = test_board.occupancy
-                    if occupancy == "draw":
+                    if occupancy == BoardState.DRAW:
                         result = MCT.NodeMCT.Result.draw
                     elif occupancy == initiator:
                         result = MCT.NodeMCT.Result.the_initiator_wins
@@ -263,7 +268,7 @@ class MCT:
                 action = current_node.state
                 node_path.append(current_node)
                 terminal = board.take(*action, ai_side)
-                yield action, {"board": copy.deepcopy(board), "score": score, "log": current_node.record}
+                yield action, {"board": board.copy(), "score": score, "log": current_node.record}
             current_side = SlotState.PLAYER1 if current_side == SlotState.PLAYER2 else SlotState.PLAYER2
 
         # Final back-propagation
@@ -279,7 +284,7 @@ class MCT:
         for node in node_path:
             node.update(result)
         #  Yield last result if it's the input who ended the game
-        if current_side == opponent:
+        if current_side == user_side:
             yield None, {"board": board, "score": score, "log": current_node.record}
 
     def _add_node(self, parent, action):

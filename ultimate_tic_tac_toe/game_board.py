@@ -1,6 +1,7 @@
 import random
 from enum import IntEnum
 import numpy as np
+from typing import Tuple, Optional, List
 
 
 class SlotState(IntEnum):
@@ -18,12 +19,12 @@ class BoardState(IntEnum):
 
 class UltimateTicTacToe:
     class TicTacToe:
-        def __init__(self, slots, **kwargs):
+        def __init__(self, slots: np.ndarray, occupancy: BoardState, num_filled_slots: int, **kwargs):
             assert slots.shape == (3, 3)
             self._slots = slots
-            self._occupancy = BoardState.UNOCCUPIED
-            self._num_filled_slots = 0
-            return super().__init__(**kwargs)
+            self._occupancy = occupancy
+            self._num_filled_slots = num_filled_slots
+            super().__init__(**kwargs)
 
         def take(self, row: int, column: int, side: int):
             """
@@ -46,7 +47,7 @@ class UltimateTicTacToe:
                         or (self._slots[0, column] == self._slots[1, column] == self._slots[2, column]) \
                         or (row == column and self._slots[0, 0] == self._slots[1, 1] == self._slots[2, 2]) \
                         or (row + column == 2 and self._slots[0, 2] == self._slots[1, 1] == self._slots[2, 0]):
-                        self._occupancy = BoardState.UNOCCUPIED
+                        self._occupancy = side
                         return True
                     if self._num_filled_slots == 9:
                         self._occupancy = BoardState.DRAW
@@ -57,6 +58,7 @@ class UltimateTicTacToe:
             else:
                 raise ValueError("The slot is already occupied!")
 
+        @property
         def occupancy(self):
             return self._occupancy
 
@@ -76,39 +78,90 @@ class UltimateTicTacToe:
                         actions.append((row, column))
             return actions
 
-    def __init__(self, **kwargs):
+    def __init__(self,
+                 slots: np.ndarray,
+                 blocks: Tuple[Tuple[TicTacToe]],
+                 next_player_side,
+                 next_block_coordinate: Optional[Tuple[int, int]],
+                 num_filled_blocks: int,
+                 occupancy,
+                 sovereignty_upon_draw="none"):
+        self._slots: np.ndarray = slots
+        self._blocks: Tuple[Tuple[UltimateTicTacToe.TicTacToe]] = blocks
+        self._next_player_side: Optional[BoardState] = next_player_side
+        self._next_block_coordinate: Tuple[int, int] = next_block_coordinate
+        self._num_filled_blocks = num_filled_blocks  # Total number of blocks that has been occupied.
+        self._occupancy = occupancy
+        if sovereignty_upon_draw in ("none", "both"):
+            self._sovereignty_upon_draw = sovereignty_upon_draw
+        else:
+            raise ValueError('Invalid rule set. "sovereignty_upon_draw" should be either "both" or "none".')
+        super().__init__()
+
+    @classmethod
+    def create_initial_board(cls, **kwargs):
         """
         :param kwargs:
         """
-        self._slots = np.zeros([9, 9], dtype=np.int32)
-        self._blocks = self.__class__._split_board_into_blocks(self._slots)
-        self._next_player_side = SlotState.PLAYER1
-        self._next_block_coordinate = None
-        self._num_filled_blocks = 0  # Total number of blocks that has been occupied.
-        self._occupancy = None
+        def split_board_into_blocks(slots):
+            blocks: List[Tuple[UltimateTicTacToe.TicTacToe]] = []
+            for row in range(0, 9, 3):
+                block_buff = []
+                for column in range(0, 9, 3):
+                    block_buff.append(UltimateTicTacToe.TicTacToe(slots=slots[row:row + 3, column:column + 3], occupancy=BoardState.UNOCCUPIED, num_filled_slots=0))
+                blocks.append(tuple(block_buff))
+            blocks: Tuple[Tuple[UltimateTicTacToe.TicTacToe]] = tuple(blocks)
+            return blocks
+
+        slots = np.zeros([9, 9], dtype=np.int32)
+        blocks = split_board_into_blocks(slots)
+        next_block_coordinate = None
+        num_filled_blocks = 0  # Total number of blocks that has been occupied.
+        occupancy = None
         if not ("sovereignty_upon_draw" in kwargs):
-            self._sovereignty_upon_draw = "none"
+            sovereignty_upon_draw = "none"
         elif kwargs["sovereignty_upon_draw"] in ("none", "both"):
-            self._sovereignty_upon_draw = kwargs["sovereignty_upon_draw"]
+            sovereignty_upon_draw = kwargs["sovereignty_upon_draw"]
         else:
             raise ValueError('Invalid rule set. "sovereignty_upon_draw" should be either "both" or "none".')
-
         if "initiator" in kwargs:
-            print("initiator in args, yet this parameter will be removed.")
+            raise ValueError('"initiator" in args, yet this parameter has been removed.')
         else:
-            self._next_player_side = SlotState.PLAYER1
-        return super().__init__()
+            next_player_side = SlotState.PLAYER1
+        board = UltimateTicTacToe(slots=slots,
+                                  blocks=blocks,
+                                  next_player_side=next_player_side,
+                                  next_block_coordinate=next_block_coordinate,
+                                  num_filled_blocks=num_filled_blocks,
+                                  occupancy=occupancy,
+                                  sovereignty_upon_draw=sovereignty_upon_draw)
+        return board
 
-    @classmethod
-    def _split_board_into_blocks(cls, slots):
-        blocks = []
-        for row in range(0, 9, 3):
-            blocks.append([])
-            for column in range(0, 9, 3):
-                blocks[-1].append(UltimateTicTacToe.TicTacToe(slots[row:row + 3, column:column + 3]))
-        return blocks
+    def copy(self):
+        # Make a copy of slots
+        new_slots = self._slots.copy()
+        # Create blocks according given slots
+        new_blocks = []
+        for row in range(3):
+            block_buff = []
+            for col in range(3):
+                current_block = self._blocks[row][col]
+                current_block_slots = new_slots[3 * row:3 * (row + 1), 3 * col: 3 * (col + 1)]
+                new_block = self.__class__.TicTacToe(slots=current_block_slots,
+                                                     occupancy=current_block._occupancy,
+                                                     num_filled_slots=current_block._num_filled_slots)
+                block_buff.append(new_block)
+            new_blocks.append(tuple(block_buff))
+        new_blocks = tuple(new_blocks)
+        return UltimateTicTacToe(slots=new_slots,
+                                 blocks=new_blocks,
+                                 next_player_side=self._next_player_side,
+                                 next_block_coordinate=self._next_block_coordinate,
+                                 num_filled_blocks=self._num_filled_blocks,
+                                 occupancy=self._occupancy,
+                                 sovereignty_upon_draw=self._sovereignty_upon_draw)
 
-    def take(self, row_block, column_block, row_slot, column_slot, side):
+    def take(self, row_block: int, column_block: int, row_slot: int, column_slot: int, side):
         """
 
         :param row_block:
@@ -122,34 +175,32 @@ class UltimateTicTacToe:
             raise ValueError("Invalid coordinate. ")
         if (self._next_block_coordinate is not None) and not ((row_block, column_block) == self._next_block_coordinate):
             raise ValueError("Rule violation. Invalid block. ")
-        if self._blocks[row_block][column_block].occupancy() == BoardState.UNOCCUPIED:
+        if self._blocks[row_block][column_block].occupancy == BoardState.UNOCCUPIED:
             if (side == SlotState.PLAYER1 or side == SlotState.PLAYER2) and (self._next_player_side == side):
                 terminal = self._blocks[row_block][column_block].take(row_slot, column_slot, side)
                 self._next_player_side = SlotState.PLAYER1 if side == SlotState.PLAYER2 else SlotState.PLAYER2
-                self._next_block_coordinate = None if self._blocks[row_slot][column_slot].occupancy() is not None else (
+                self._next_block_coordinate = None if self._blocks[row_slot][column_slot].occupancy != BoardState.UNOCCUPIED else (
                     row_slot, column_slot)
                 if terminal:
                     self._num_filled_blocks += 1
-                    horizontal = (self._blocks[row_block][0].occupancy(), self._blocks[row_block][1].occupancy(),
-                                  self._blocks[row_block][2].occupancy())
-                    vertical = (self._blocks[0][column_block].occupancy(), self._blocks[1][column_block].occupancy(),
-                                self._blocks[2][column_block].occupancy())
+                    horizontal = (self._blocks[row_block][0].occupancy, self._blocks[row_block][1].occupancy,
+                                  self._blocks[row_block][2].occupancy)
+                    vertical = (self._blocks[0][column_block].occupancy, self._blocks[1][column_block].occupancy,
+                                self._blocks[2][column_block].occupancy)
                     diagonal1 = (
-                        self._blocks[0][0].occupancy(), self._blocks[1][1].occupancy(), self._blocks[2][2].occupancy())
+                        self._blocks[0][0].occupancy, self._blocks[1][1].occupancy, self._blocks[2][2].occupancy)
                     diagonal2 = (
-                        self._blocks[2][0].occupancy(), self._blocks[1][1].occupancy(), self._blocks[0][2].occupancy())
+                        self._blocks[2][0].occupancy, self._blocks[1][1].occupancy, self._blocks[0][2].occupancy)
                     if self._sovereignty_upon_draw == "both":
                         horizontal = list(map(lambda x: x if x != BoardState.DRAW else side, horizontal))
                         vertical = list(map(lambda x: x if x != BoardState.DRAW else side, vertical))
                         diagonal1 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal1))
                         diagonal2 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal2))
                     # Search row, column and diagonal
-                    if (horizontal[0] == horizontal[1] and horizontal[1] == horizontal[2]) \
-                        or (vertical[0] == vertical[1] and vertical[1] == vertical[2]) \
-                        or (row_block == column_block and diagonal1[0] == diagonal1[1] and diagonal1[1] == diagonal1[2]) \
-                        or (
-                        row_block + column_block == 2 and diagonal2[0] == diagonal2[1] and diagonal2[1] == diagonal2[
-                        2]):
+                    if (side == horizontal[0] == horizontal[1] == horizontal[2]) \
+                        or (side == vertical[0] == vertical[1] == vertical[2]) \
+                        or (row_block == column_block and side == diagonal1[0] == diagonal1[1] == diagonal1[2]) \
+                            or (row_block + column_block == 2 and side == diagonal2[0] == diagonal2[1] == diagonal2[2]):
                         self._occupancy = side
                         self._next_player_side = None
                         self._next_block_coordinate = None
@@ -190,7 +241,6 @@ class UltimateTicTacToe:
                        block.valid_actions]
         return actions
 
-    @property
     def random_action(self):
         actions = self.valid_actions
         if len(actions) > 0:
@@ -216,28 +266,25 @@ class UltimateTicTacToe:
         :param token2: token for the counterpart
         :return:
         """
-
         def state2token(state_id):
             return {
-                SlotState.PLAYER1.value: token1,
-                SlotState.PLAYER2.value: token2,
-                SlotState.UNOCCUPIED.value: " "
+                SlotState.PLAYER1.value: " {} ".format(token1),
+                SlotState.PLAYER2.value: " {} ".format(token2),
+                SlotState.UNOCCUPIED.value: "   "
             }[state_id]
 
+        lines = []
+        for row_idx, row in enumerate(self._slots):
+            if row_idx in (3, 6):
+                lines.append("=====================================")
+            elif 0 < row_idx < 9:
+                lines.append("-------------------------------------")
+            line = list(map(state2token, row))
+            line_buff = []
+            for col_idx in range(0, 9, 3):
+                line_buff.append("|".join(line[col_idx:col_idx+3]))
+            line = "||".join(line_buff)
+            lines.append(line)
 
+        return "\n".join(lines)
 
-        whole_ultimate_tic_tac_toe = []
-        for row in self._slots:
-            row = " | ".join(list(map(state2token, row)))
-            whole_ultimate_tic_tac_toe.append(row)
-        return "\n---------------------------------\n".join(whole_ultimate_tic_tac_toe) + "\n"
-
-
-if __name__ == "__main__":
-    board = UltimateTicTacToe(initiator="X")
-    action = board.random_action
-    while action is not None:
-        board.take(*action, board.next_side)
-        action = board.random_action
-    print(board)
-    print(board.state_report())

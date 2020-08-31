@@ -21,9 +21,9 @@ class UltimateTicTacToe:
     class TicTacToe:
         def __init__(self, slots: np.ndarray, occupancy: BoardState, num_filled_slots: int, **kwargs):
             assert slots.shape == (3, 3)
-            self._slots = slots
-            self._occupancy = occupancy
-            self._num_filled_slots = num_filled_slots
+            self._slots: np.ndarray = slots
+            self._occupancy: BoardState = occupancy
+            self._num_filled_slots: int = num_filled_slots
             super().__init__(**kwargs)
 
         def take(self, row: int, column: int, side: int):

@@ -1,11 +1,10 @@
 import pickle
-import time
 import os
 import math
 from ultimate_tic_tac_toe.game_board import UltimateTicTacToe, BoardState, SlotState
 import random
 from enum import Enum, unique
-from typing import Tuple, Iterable
+from typing import List, Tuple, Iterable, Optional
 
 
 class MCT:
@@ -16,7 +15,7 @@ class MCT:
             the_initiator_loses = 1
             draw = 2
 
-        def __init__(self, op=None):
+        def __init__(self, op: Optional[Tuple[int, int, int, int]]=None):
             """
             Initialization of a node.
             self._op: the operation from last state to reach this node.
@@ -25,7 +24,7 @@ class MCT:
             #draw=self._val[2]-self._val[0]-self._val[1]
             self._next: a list of children of the node.
             """
-            if type(op) == tuple and len(op) == 4:
+            if isinstance(op, tuple) and len(op) == 4:
                 for val in op:
                     if val not in range(3):
                         raise ValueError("Each entry of the state must be an integer from 1-3")
@@ -34,8 +33,8 @@ class MCT:
                 self._op = op
             else:
                 raise TypeError('Parameter "op" must be either None or a tuple of (row_block, row_column, row_slot, column_slot)')
-            self._val = (0, 0, 0)
-            self._next = []
+            self._val: Tuple[int, int, int] = 0, 0, 0
+            self._next: List[MCT.NodeMCT] = []
 
         # Need to be checked
         def add_child(self, action):
@@ -46,11 +45,11 @@ class MCT:
         def update(self, result):
             n_victory, n_loss, n_total = self._val
             if result == MCT.NodeMCT.Result.the_initiator_wins:
-                self._val = (n_victory + 1, n_loss, n_total + 1)
+                self._val = n_victory + 1, n_loss, n_total + 1
             elif result == MCT.NodeMCT.Result.the_initiator_loses:
-                self._val = (n_victory, n_loss + 1, n_total + 1)
+                self._val = n_victory, n_loss + 1, n_total + 1
             elif result == MCT.NodeMCT.Result.draw:
-                self._val = (n_victory, n_loss, n_total + 1)
+                self._val = n_victory, n_loss, n_total + 1
             else:
                 raise ValueError("Invalid result.")
 

@@ -207,12 +207,15 @@ class MCT:
                     else:
                         terminal = board.take(*action, current_side)
                         break
+                next_node = None
                 for node in current_node.children:
                     if node.state == action:
-                        current_node = node
-                    else:
-                        current_node = model._add_node(current_node, action)
-                    node_path.append(current_node)
+                        next_node = node
+                if next_node is None:
+                    next_node = model._add_node(current_node, action)
+                current_node = next_node
+                del next_node
+                node_path.append(current_node)
             else:  # The model's turn
                 # To be fixed
                 for test_epoch in range(num_eval_for_each_step):

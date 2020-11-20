@@ -4,18 +4,41 @@ import math
 from ultimate_tic_tac_toe.game_board import UltimateTicTacToe, BoardState, SlotState
 import random
 from enum import Enum, unique
-from typing import List, Tuple, Iterable, Optional
+from typing import Dict, Tuple, Iterable, Optional, Union
+import numpy as np
 
 
 class MCT:
-    class NodeMCT:
+    class Node:
         @unique
         class Result(Enum):
             the_initiator_wins = 0
             the_initiator_loses = 1
             draw = 2
 
-        def __init__(self, op: Optional[Tuple[int, int, int, int]]=None):
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyNode(Node):
+        def __init__(self):
+            self._parent = None
+            self.children = {}
+            pass
+
+        def update(self, *args, **kwargs):
+            pass
+
+        def _update_child_game_log(self, *args, **kwargs):
+            pass
+
+        def add_child(self, *args, **kwargs):
+            action_id = None
+            node = MCT.ActualNode(op=action_id, parent=self)
+            self.children[action_id] = node
+            return node
+
+    class ActualNode(Node):
+        def __init__(self, op: Optional[Union[int, Tuple[int, int, int, int]]] = None, parent=None):
             """
             Initialization of a node.
             self._op: the operation from last state to reach this node.
@@ -24,63 +47,85 @@ class MCT:
             #draw=self._val[2]-self._val[0]-self._val[1]
             self._next: a list of children of the node.
             """
+            if isinstance(op, tuple):
+                op = self._action2id(op)
+            if (op is None) or (isinstance(op, int) and (0 <= op < 81)):
+                self._action_id = op
+            else:
+                raise ValueError("Invalid op: {}".format(op))
+            self.children: Dict[int, MCT.ActualNode] = {}
+            self._parent: Optional[MCT.ActualNode] = parent
+            self._child_game_log = np.zeros([3, 81])  # dim_0: [initator_wins, initiator_loses, draw], dim_1: [action_id0, action_id1, ..., action_id80]
+
+        @classmethod
+        def _action2id(cls, op: Tuple[int, int, int, int]):
             if isinstance(op, tuple) and len(op) == 4:
                 for val in op:
                     if val not in range(3):
                         raise ValueError("Each entry of the state must be an integer from 1-3")
-                self._op = op
-            elif op is None:
-                self._op = op
+                row_block, column_block, row_slot, column_slot = op
+                row = row_block * 3 + row_slot
+                column = column_block * 3 + column_slot
+                idx = row * 9 + column
+                return idx
             else:
-                raise TypeError('Parameter "op" must be either None or a tuple of (row_block, row_column, row_slot, column_slot)')
-            self._val: Tuple[int, int, int] = 0, 0, 0
-            self._next: List[MCT.NodeMCT] = []
+                raise TypeError('Parameter "op" must be either None or a tuple of (row_block, column_block, row_slot, column_slot)')
 
-        # Need to be checked
-        def add_child(self, action):
-            node = MCT.NodeMCT(action)
-            self._next.append(node)
+        def add_child(self, action: Union[int, Tuple[int, int, int, int]]):
+            action_id = self._action2id(action) if isinstance(action, tuple) else action
+            node = MCT.ActualNode(action_id, parent=self)
+            assert action_id not in self.children
+            self.children[action_id] = node
             return node
 
-        def update(self, result):
-            n_victory, n_loss, n_total = self._val
-            if result == MCT.NodeMCT.Result.the_initiator_wins:
-                self._val = n_victory + 1, n_loss, n_total + 1
-            elif result == MCT.NodeMCT.Result.the_initiator_loses:
-                self._val = n_victory, n_loss + 1, n_total + 1
-            elif result == MCT.NodeMCT.Result.draw:
-                self._val = n_victory, n_loss, n_total + 1
+        def _update_child_game_log(self, action_id, result):
+            if result == MCT.Node.Result.the_initiator_wins:
+                log_to_update = self._child_game_log[0]
+            elif result == MCT.Node.Result.the_initiator_loses:
+                log_to_update = self._child_game_log[1]
+            elif result == MCT.Node.Result.draw:
+                log_to_update = self._child_game_log[2]
             else:
                 raise ValueError("Invalid result.")
+            log_to_update[action_id] += 1
+
+        def update(self, result):
+            action_id = self._action_id
+            self._parent._update_child_game_log(action_id, result)
 
         def get_best_child(self, is_initiator, c=math.sqrt(2)):
             if c < 0:
                 raise ValueError('Parameter c must be greater or equal to 0. ')
-            children = self.children
-            score_node_pairs = [(MCT.NodeMCT.get_score_of_child(self, node, is_initiator), node) for node in children]
-            best_child = max(score_node_pairs, key=lambda x: x[0], default=(None, None))[1]
+            if not self.children:
+                raise ValueError("There's no child for current node.")
+            vals = self.get_children_values(is_initiator=is_initiator, c=c)
+            best_action = max(self.children.keys(), key=lambda k: vals[k])
+            best_child = self.children[best_action]
             return best_child
 
-        @classmethod
-        def get_score_of_child(cls, parent_node, child_node, is_initiator, c=math.sqrt(2)):
+        @property
+        def total_visit(self):
+            return np.sum(self._child_game_log)
+
+        def get_children_values(self, is_initiator, c=math.sqrt(2)):
             if is_initiator:
-                return child_node.record[0] / child_node.record[2] + c * math.sqrt(
-                    math.log(parent_node.record[2]) / child_node.record[2])
+                n_win, n_lose, n_draw = self._child_game_log
             else:
-                return child_node.record[1] / child_node.record[2] + c * math.sqrt(
-                    math.log(parent_node.record[2]) / child_node.record[2])
+                n_lose, n_win, n_draw = self._child_game_log
+            child_total = np.sum(self._child_game_log, axis=0)
+            child_total_plus_one = child_total + 1
+            self_total = np.sum(child_total)
+            child_q_vals = n_win / child_total_plus_one
+            child_u_vals = c * np.sqrt(np.log(self_total + 1) / (child_total_plus_one))
+            return child_q_vals + child_u_vals
 
         @property
-        def children(self):
-            return self._next[:]
-
-        @property
-        def state(self):
-            return self._op
+        def action_id(self):
+            return self._action_id
 
         @property
         def record(self):
-            return self._val
+            return np.sum(self._child_game_log, axis=1)
 
     @unique
     class Stage(Enum):
@@ -94,7 +139,9 @@ class MCT:
         self._root: root of the tree
         self._size: total number of nodes (except root node) in the tree
         """
-        self._root = MCT.NodeMCT()
+        root = MCT.DummyNode()
+        root.add_child(op=None)
+        self._root = root
         self._size = 0
         try:
             UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=sovereignty_upon_draw)
@@ -128,7 +175,7 @@ class MCT:
                     print(board)
                 # Selection
                 if stage == MCT.Stage.selection:
-                    explored_actions = [node.state for node in current_node.children]
+                    explored_actions = [node.action_id for node in current_node.children]
                     valid_actions = board.valid_actions
                     actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
                     if len(list(set(explored_actions)-set(valid_actions))) > 0:
@@ -142,7 +189,7 @@ class MCT:
                     else:
                         current_node = current_node.get_best_child(current_side == initiator)
                         path.append(current_node)
-                        action = current_node.state
+                        action = current_node.action_id
                         n_exploitation += 1
                     if verbose >= 2:
                         print("Taking action {}.".format(action))
@@ -160,11 +207,11 @@ class MCT:
                 current_side = "X" if current_side == "O" else "O"
             # back-propagation
             if board.occupancy == initiator:
-                result = MCT.NodeMCT.Result.the_initiator_wins
+                result = MCT.ActualNode.Result.the_initiator_wins
             elif board.occupancy == opponent:
-                result = MCT.NodeMCT.Result.the_initiator_loses
+                result = MCT.ActualNode.Result.the_initiator_loses
             elif board.occupancy == "draw":
-                result = MCT.NodeMCT.Result.draw
+                result = MCT.ActualNode.Result.draw
             else:
                 raise ValueError("Failed to get expected result.")
             for node in path:
@@ -201,22 +248,19 @@ class MCT:
                     try:
                         action = next(input_stream)
                     except StopIteration:
-                        raise RuntimeError("Can't receive action from player. ")
+                        raise RuntimeError("Can't receive action from player.")
                     if action not in board.valid_actions:
                         print("Invalid action. Please try again.")
                         continue
                     else:
                         terminal = board.take(*action, current_side)
                         break
-                next_node = None
-                for node in current_node.children:
-                    if node.state == action:
-                        next_node = node
-                if next_node is None:
-                    next_node = model._add_node(current_node, action)
-                current_node = next_node
-                del next_node
-                node_path.append(current_node)
+                for action_id, node in current_node.children.items():
+                    if node.action_id == action:
+                        current_node = node
+                    else:
+                        current_node = model._add_node(current_node, action)
+                    node_path.append(current_node)
             else:  # The model's turn
                 # To be fixed
                 for test_epoch in range(num_eval_for_each_step):
@@ -228,7 +272,7 @@ class MCT:
                     # Selection
                     while not test_terminal:
                         valid_actions = test_board.valid_actions
-                        explored_actions = [node.state for node in test_current_node.children]
+                        explored_actions = [MCT._id2action(action_id) for action_id in test_current_node.children]
                         actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
                         if len(actions_to_be_explored) > 0:
                             action = random.choice(actions_to_be_explored)
@@ -240,7 +284,7 @@ class MCT:
                         else:
                             test_current_node = test_current_node.get_best_child(test_current_side == initiator)
                             test_node_path.append(test_current_node)
-                            action = test_current_node.state
+                            action = MCT._id2action(test_current_node.action_id)
                             test_terminal = test_board.take(*action, test_current_side)
                             test_current_side = test_board.next_side
 
@@ -254,20 +298,20 @@ class MCT:
                     # Back-propagation
                     occupancy = test_board.occupancy
                     if occupancy == BoardState.DRAW:
-                        result = MCT.NodeMCT.Result.draw
+                        result = MCT.ActualNode.Result.draw
                     elif occupancy == initiator:
-                        result = MCT.NodeMCT.Result.the_initiator_wins
+                        result = MCT.ActualNode.Result.the_initiator_wins
                     elif occupancy == defender:
-                        result = MCT.NodeMCT.Result.the_initiator_loses
+                        result = MCT.ActualNode.Result.the_initiator_loses
                     else:
                         raise ValueError("Invalid occupancy when the game terminates.")
                     for node in node_path+test_node_path:
                         node.update(result)
                 is_initiator = current_side == initiator
                 best_node = current_node.get_best_child(is_initiator)
-                score = MCT.NodeMCT.get_score_of_child(current_node, best_node, is_initiator)
+                score = current_node.get_children_values(is_initiator)[best_node.action_id]  # to be optimized: Duplicated value calculation
                 current_node = best_node  # Update node reference
-                action = current_node.state
+                action = MCT._id2action(current_node.action_id)
                 node_path.append(current_node)
                 terminal = board.take(*action, ai_side)
                 yield action, {"board": board.copy(), "score": score, "log": current_node.record}
@@ -276,11 +320,11 @@ class MCT:
         # Final back-propagation
         occupancy = board.occupancy
         if occupancy == "draw":
-            result = MCT.NodeMCT.Result.draw
+            result = MCT.Node.Result.draw
         elif occupancy == initiator:
-            result = MCT.NodeMCT.Result.the_initiator_wins
+            result = MCT.Node.Result.the_initiator_wins
         elif occupancy == defender:
-            result = MCT.NodeMCT.Result.the_initiator_loses
+            result = MCT.Node.Result.the_initiator_loses
         else:
             raise ValueError("Invalid occupancy when the game terminates.")
         for node in node_path:
@@ -293,6 +337,20 @@ class MCT:
         node = parent.add_child(action)
         self._size += 1
         return node
+
+    @classmethod
+    def _action2id(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
+        row = row_block * 3 + row_slot
+        column = column_block * 3 + column_slot
+        idx = row * 9 + column
+        return idx
+
+    @classmethod
+    def _id2action(cls, idx: int) -> Tuple[int, int, int, int]:
+        row, column = divmod(idx, 9)
+        row_block, row_slot = divmod(row, 3)
+        column_block, column_slot = divmod(column, 3)
+        return row_block, column_block, row_slot, column_slot
 
     @property
     def size(self):
@@ -325,8 +383,8 @@ class MCT:
             print(e)
             return None
 
-    def __repr__(self):
-        return "Knowledge base size: {}\nOverall: {}\n".format(self.size, self._root.record)
+    #def __repr__(self):
+        #return "Knowledge base size: {}\nOverall: {}\n".format(self.size, self._root.record)
 
 
 if __name__ == "__main__":

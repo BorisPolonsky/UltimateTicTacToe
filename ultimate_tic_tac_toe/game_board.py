@@ -223,7 +223,7 @@ class UltimateTicTacToe:
     def valid_actions(self):
         """
         Return valid actions.
-        :return: Return a list of actions [(block_row,block_column,slot_row,slot_column),...]
+        :return: Return a list of actions [(block_row, block_column,slot_row,slot_column),...]
         """
 
         if self._next_block_coordinate is None:

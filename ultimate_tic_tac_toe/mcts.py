@@ -32,7 +32,8 @@ class MCT:
             pass
 
         def add_child(self, *args, **kwargs):
-            action_id = None
+            # action_id = None
+            action_id = 0
             node = MCT.ActualNode(op=action_id, parent=self)
             self.children[action_id] = node
             return node
@@ -140,9 +141,9 @@ class MCT:
         self._size: total number of nodes (except root node) in the tree
         """
         root = MCT.DummyNode()
-        root.add_child(op=None)
+        root = root.add_child(op=0)
         self._root = root
-        self._size = 0
+        self._size = 0  # Not taking dummy node into account
         try:
             UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=sovereignty_upon_draw)
         except Exception as e:
@@ -165,7 +166,7 @@ class MCT:
                 print("Training epoch {} in a total of {}: ".format(epoch, epoch_num))
             terminal = False
             current_node = tree._root
-            initiator, opponent = "X", "O"
+            initiator, opponent = SlotState.PLAYER1, SlotState.PLAYER2
             current_side = initiator
             board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=tree._sovereignty_upon_draw)
             stage = MCT.Stage.selection
@@ -175,42 +176,43 @@ class MCT:
                     print(board)
                 # Selection
                 if stage == MCT.Stage.selection:
-                    explored_actions = [node.action_id for node in current_node.children]
-                    valid_actions = board.valid_actions
+                    explored_actions = set(current_node.children.keys())
+                    valid_actions = set(map(lambda action_tuple: cls._action2id(*action_tuple), board.valid_actions))
                     actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
                     if len(list(set(explored_actions)-set(valid_actions))) > 0:
                         raise RuntimeError("Explored invalid actions!")
                     if len(actions_to_be_explored) > 0:
-                        action = random.choice(actions_to_be_explored)
+                        action_id = random.choice(actions_to_be_explored)
                         stage = MCT.Stage.simulation
-                        current_node = tree._add_node(current_node, action)
+                        current_node = tree._add_node(current_node, action_id)
                         path.append(current_node)
                         n_exploration += 1
                     else:
                         current_node = current_node.get_best_child(current_side == initiator)
                         path.append(current_node)
-                        action = current_node.action_id
+                        action_id = current_node.action_id
                         n_exploitation += 1
+                    action_tuple = cls._id2action(action_id)
                     if verbose >= 2:
-                        print("Taking action {}.".format(action))
-                    terminal = board.take(*action, current_side)
+                        print("Taking action {}.".format(action_tuple))
+                    terminal = board.take(*action_tuple, current_side)
 
                 elif stage == MCT.Stage.simulation:
-                    action = board.random_action()
-                    current_node = tree._add_node(current_node, action)
+                    action_id = board.random_action()
+                    current_node = tree._add_node(current_node, action_id)
                     if verbose >= 2:
-                        print("Taking action {}.".format(action))
-                    terminal = board.take(*action, current_side)
+                        print("Taking action {}.".format(action_id))
+                    terminal = board.take(*action_id, current_side)
                     path.append(current_node)
                     n_exploration += 1
 
-                current_side = "X" if current_side == "O" else "O"
+                current_side = SlotState.PLAYER2 if current_side == SlotState.PLAYER1 else SlotState.PLAYER1
             # back-propagation
-            if board.occupancy == initiator:
+            if board.occupancy == BoardState.OCCUPIED_BY_PLAYER1:
                 result = MCT.ActualNode.Result.the_initiator_wins
-            elif board.occupancy == opponent:
+            elif board.occupancy == BoardState.OCCUPIED_BY_PLAYER2:
                 result = MCT.ActualNode.Result.the_initiator_loses
-            elif board.occupancy == "draw":
+            elif board.occupancy == BoardState.DRAW:
                 result = MCT.ActualNode.Result.draw
             else:
                 raise ValueError("Failed to get expected result.")

@@ -10,12 +10,6 @@ import numpy as np
 
 class MCT:
     class Node:
-        @unique
-        class Result(Enum):
-            the_initiator_wins = 0
-            the_initiator_loses = 1
-            draw = 2
-
         def __init__(self, *args, **kwargs):
             pass
 
@@ -32,7 +26,6 @@ class MCT:
             pass
 
         def add_child(self, *args, **kwargs):
-            # action_id = None
             action_id = 0
             node = MCT.ActualNode(op=action_id, parent=self)
             self.children[action_id] = node
@@ -49,7 +42,7 @@ class MCT:
             self._next: a list of children of the node.
             """
             if isinstance(op, tuple):
-                op = self._action2id(op)
+                op = MCT._action2id(op)
             if (op is None) or (isinstance(op, int) and (0 <= op < 81)):
                 self._action_id = op
             else:
@@ -58,33 +51,20 @@ class MCT:
             self._parent: Optional[MCT.ActualNode] = parent
             self._child_game_log = np.zeros([3, 81])  # dim_0: [initator_wins, initiator_loses, draw], dim_1: [action_id0, action_id1, ..., action_id80]
 
-        @classmethod
-        def _action2id(cls, op: Tuple[int, int, int, int]):
-            if isinstance(op, tuple) and len(op) == 4:
-                for val in op:
-                    if val not in range(3):
-                        raise ValueError("Each entry of the state must be an integer from 1-3")
-                row_block, column_block, row_slot, column_slot = op
-                row = row_block * 3 + row_slot
-                column = column_block * 3 + column_slot
-                idx = row * 9 + column
-                return idx
-            else:
-                raise TypeError('Parameter "op" must be either None or a tuple of (row_block, column_block, row_slot, column_slot)')
-
-        def add_child(self, action: Union[int, Tuple[int, int, int, int]]):
-            action_id = self._action2id(action) if isinstance(action, tuple) else action
+        def add_child(self, action_id: int):
+            if not isinstance(action_id, int):
+                print("{}".format(action_id))
             node = MCT.ActualNode(action_id, parent=self)
             assert action_id not in self.children
             self.children[action_id] = node
             return node
 
         def _update_child_game_log(self, action_id, result):
-            if result == MCT.Node.Result.the_initiator_wins:
+            if result == MCT.Result.THE_INITIATOR_WINS:
                 log_to_update = self._child_game_log[0]
-            elif result == MCT.Node.Result.the_initiator_loses:
+            elif result == MCT.Result.THE_INITIATOR_LOSES:
                 log_to_update = self._child_game_log[1]
-            elif result == MCT.Node.Result.draw:
+            elif result == MCT.Result.DRAW:
                 log_to_update = self._child_game_log[2]
             else:
                 raise ValueError("Invalid result.")
@@ -130,10 +110,15 @@ class MCT:
 
     @unique
     class Stage(Enum):
-        selection = 0
-        simulation = 1
-        back_propagation = 2
+        SELECTION = 0
+        SIMULATION = 1
+        BACK_PROPAGATION = 2
 
+    @unique
+    class Result(Enum):
+        THE_INITIATOR_WINS = 0
+        THE_INITIATOR_LOSES = 1
+        DRAW = 2
     def __init__(self, sovereignty_upon_draw="none"):
         """
         Create an empty MCT.
@@ -161,29 +146,29 @@ class MCT:
         :return: n_exploitation, n_exploration
         """
         n_exploration, n_exploitation = 0, 0
+        initiator, opponent = SlotState.PLAYER1, SlotState.PLAYER2
         for epoch in range(1, epoch_num + 1):
             if verbose >= 1:
                 print("Training epoch {} in a total of {}: ".format(epoch, epoch_num))
             terminal = False
             current_node = tree._root
-            initiator, opponent = SlotState.PLAYER1, SlotState.PLAYER2
             current_side = initiator
             board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=tree._sovereignty_upon_draw)
-            stage = MCT.Stage.selection
+            stage = MCT.Stage.SELECTION
             path = [current_node]
             while not terminal:
                 if verbose >= 2:
                     print(board)
                 # Selection
-                if stage == MCT.Stage.selection:
+                if stage == MCT.Stage.SELECTION:
                     explored_actions = set(current_node.children.keys())
-                    valid_actions = set(map(lambda action_tuple: cls._action2id(*action_tuple), board.valid_actions))
+                    valid_actions = set(map(lambda action_tuple: cls._action2id(action_tuple), board.valid_actions))
                     actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
                     if len(list(set(explored_actions)-set(valid_actions))) > 0:
                         raise RuntimeError("Explored invalid actions!")
                     if len(actions_to_be_explored) > 0:
                         action_id = random.choice(actions_to_be_explored)
-                        stage = MCT.Stage.simulation
+                        stage = MCT.Stage.SIMULATION
                         current_node = tree._add_node(current_node, action_id)
                         path.append(current_node)
                         n_exploration += 1
@@ -197,7 +182,7 @@ class MCT:
                         print("Taking action {}.".format(action_tuple))
                     terminal = board.take(*action_tuple, current_side)
 
-                elif stage == MCT.Stage.simulation:
+                elif stage == MCT.Stage.SIMULATION:
                     action_id = board.random_action()
                     current_node = tree._add_node(current_node, action_id)
                     if verbose >= 2:
@@ -209,11 +194,11 @@ class MCT:
                 current_side = SlotState.PLAYER2 if current_side == SlotState.PLAYER1 else SlotState.PLAYER1
             # back-propagation
             if board.occupancy == BoardState.OCCUPIED_BY_PLAYER1:
-                result = MCT.ActualNode.Result.the_initiator_wins
+                result = MCT.Result.THE_INITIATOR_WINS
             elif board.occupancy == BoardState.OCCUPIED_BY_PLAYER2:
-                result = MCT.ActualNode.Result.the_initiator_loses
+                result = MCT.Result.THE_INITIATOR_LOSES
             elif board.occupancy == BoardState.DRAW:
-                result = MCT.ActualNode.Result.draw
+                result = MCT.Result.DRAW
             else:
                 raise ValueError("Failed to get expected result.")
             for node in path:
@@ -257,12 +242,13 @@ class MCT:
                     else:
                         terminal = board.take(*action, current_side)
                         break
-                for action_id, node in current_node.children.items():
-                    if node.action_id == action:
-                        current_node = node
-                    else:
-                        current_node = model._add_node(current_node, action)
-                    node_path.append(current_node)
+                #for action_id, node in current_node.children.items():
+                action_id = cls._action2id(action)
+                if action_id in current_node.children:
+                    current_node = current_node[action_id]
+                else:
+                    current_node = model._add_node(current_node, action_id)
+                node_path.append(current_node)
             else:  # The model's turn
                 # To be fixed
                 for test_epoch in range(num_eval_for_each_step):
@@ -274,8 +260,8 @@ class MCT:
                     # Selection
                     while not test_terminal:
                         valid_actions = test_board.valid_actions
-                        explored_actions = [MCT._id2action(action_id) for action_id in test_current_node.children]
-                        actions_to_be_explored = list(set(valid_actions) - set(explored_actions))
+                        explored_actions = {MCT._id2action(action_id) for action_id in test_current_node.children}
+                        actions_to_be_explored = list(set(valid_actions) - explored_actions)
                         if len(actions_to_be_explored) > 0:
                             action = random.choice(actions_to_be_explored)
                             test_current_node = model._add_node(test_current_node, action)
@@ -300,14 +286,14 @@ class MCT:
                     # Back-propagation
                     occupancy = test_board.occupancy
                     if occupancy == BoardState.DRAW:
-                        result = MCT.ActualNode.Result.draw
-                    elif occupancy == initiator:
-                        result = MCT.ActualNode.Result.the_initiator_wins
-                    elif occupancy == defender:
-                        result = MCT.ActualNode.Result.the_initiator_loses
+                        result = MCT.Result.DRAW
+                    elif occupancy == BoardState.OCCUPIED_BY_PLAYER1:
+                        result = MCT.Result.THE_INITIATOR_WINS
+                    elif occupancy == BoardState.OCCUPIED_BY_PLAYER2:
+                        result = MCT.Result.THE_INITIATOR_LOSES
                     else:
                         raise ValueError("Invalid occupancy when the game terminates.")
-                    for node in node_path+test_node_path:
+                    for node in node_path + test_node_path:
                         node.update(result)
                 is_initiator = current_side == initiator
                 best_node = current_node.get_best_child(is_initiator)
@@ -321,12 +307,12 @@ class MCT:
 
         # Final back-propagation
         occupancy = board.occupancy
-        if occupancy == "draw":
-            result = MCT.Node.Result.draw
-        elif occupancy == initiator:
-            result = MCT.Node.Result.the_initiator_wins
-        elif occupancy == defender:
-            result = MCT.Node.Result.the_initiator_loses
+        if occupancy == BoardState.DRAW:
+            result = MCT.Result.DRAW
+        elif occupancy == BoardState.OCCUPIED_BY_PLAYER1:
+            result = MCT.Result.THE_INITIATOR_WINS
+        elif occupancy == BoardState.OCCUPIED_BY_PLAYER2:
+            result = MCT.Result.THE_INITIATOR_LOSES
         else:
             raise ValueError("Invalid occupancy when the game terminates.")
         for node in node_path:
@@ -335,17 +321,26 @@ class MCT:
         if current_side == user_side:
             yield None, {"board": board, "score": score, "log": current_node.record}
 
-    def _add_node(self, parent, action):
-        node = parent.add_child(action)
+    def _add_node(self, parent, action: Union[int, Tuple[int, int, int, int]]):
+        action_id = self._action2id(action) if isinstance(action, tuple) else action
+        node = parent.add_child(action_id)
         self._size += 1
         return node
 
     @classmethod
-    def _action2id(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
-        row = row_block * 3 + row_slot
-        column = column_block * 3 + column_slot
-        idx = row * 9 + column
-        return idx
+    def _action2id(cls, op: Tuple[int, int, int, int]):
+        if isinstance(op, tuple) and len(op) == 4:
+            for val in op:
+                if val not in range(3):
+                    raise ValueError("Each entry of the state must be an integer from 1-3")
+            row_block, column_block, row_slot, column_slot = op
+            row = row_block * 3 + row_slot
+            column = column_block * 3 + column_slot
+            idx = row * 9 + column
+            return idx
+        else:
+            raise TypeError(
+                'Parameter "op" must be either None or a tuple of (row_block, column_block, row_slot, column_slot)')
 
     @classmethod
     def _id2action(cls, idx: int) -> Tuple[int, int, int, int]:
@@ -396,7 +391,7 @@ if __name__ == "__main__":
     if tree1 is None:
         tree1 = MCT(sovereignty_upon_draw="none")
     print(tree1)
-    result = MCT.offline_learning(tree1, 0)
+    result = MCT.offline_learning(tree1, 1000)
     print("#Exploitation:{}\n#Exploration:{}\n".format(*result))
     print(tree1)
     MCT.save_model(tree1, path1)
@@ -404,7 +399,7 @@ if __name__ == "__main__":
     if tree2 is None:
         tree2 = MCT(sovereignty_upon_draw="both")
     print(tree2)
-    result = MCT.offline_learning(tree2, 0)
+    result = MCT.offline_learning(tree2, 1000)
     print("#Exploitation:{}\n#Exploration:{}\n".format(*result))
     print(tree2)
     MCT.save_model(tree2, path2)

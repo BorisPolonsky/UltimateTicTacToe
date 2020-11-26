@@ -119,6 +119,7 @@ class MCT:
         THE_INITIATOR_WINS = 0
         THE_INITIATOR_LOSES = 1
         DRAW = 2
+
     def __init__(self, sovereignty_upon_draw="none"):
         """
         Create an empty MCT.
@@ -155,7 +156,6 @@ class MCT:
             current_side = initiator
             board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=tree._sovereignty_upon_draw)
             stage = MCT.Stage.SELECTION
-            path = [current_node]
             while not terminal:
                 if verbose >= 2:
                     print(board)
@@ -170,11 +170,9 @@ class MCT:
                         action_id = random.choice(actions_to_be_explored)
                         stage = MCT.Stage.SIMULATION
                         current_node = tree._add_node(current_node, action_id)
-                        path.append(current_node)
                         n_exploration += 1
                     else:
                         current_node = current_node.get_best_child(current_side == initiator)
-                        path.append(current_node)
                         action_id = current_node.action_id
                         n_exploitation += 1
                     action_tuple = cls._id2action(action_id)
@@ -188,7 +186,6 @@ class MCT:
                     if verbose >= 2:
                         print("Taking action {}.".format(action_id))
                     terminal = board.take(*action_id, current_side)
-                    path.append(current_node)
                     n_exploration += 1
 
                 current_side = SlotState.PLAYER2 if current_side == SlotState.PLAYER1 else SlotState.PLAYER1
@@ -201,18 +198,18 @@ class MCT:
                 result = MCT.Result.DRAW
             else:
                 raise ValueError("Failed to get expected result.")
-            for node in path:
+            node = current_node
+            while isinstance(node, MCT.ActualNode):
                 node.update(result)
+                node = node._parent
         return n_exploitation, n_exploration
 
-    @classmethod
-    def online_learning(cls, model,
+    def online_learning(self,
                         input_stream: Iterable[Tuple[int, int, int, int]],
                         as_initiator=True,
                         num_eval_for_each_step=1000):
         """
         Online learning with MCTS.
-        :param model
         :param input_stream
         :param as_initiator: bool. True if the input serves as the initiator the game.
         :param num_eval_for_each_step: Number action evaluation for each step.
@@ -226,9 +223,9 @@ class MCT:
             raise ValueError('Parameter "num_eval_for_each_step" must be greater than 0. ')
         current_side = initiator
         terminal = False
-        board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=model.rule_set["sovereignty_upon_draw"])
-        current_node = model._root
-        node_path = [model._root]
+        board = UltimateTicTacToe.create_initial_board(sovereignty_upon_draw=self.rule_set["sovereignty_upon_draw"])
+        current_node = self._root
+        node_path = [self._root]
         while not terminal:
             if current_side == user_side:  # The user's turn
                 while True:
@@ -242,12 +239,11 @@ class MCT:
                     else:
                         terminal = board.take(*action, current_side)
                         break
-                #for action_id, node in current_node.children.items():
-                action_id = cls._action2id(action)
+                action_id = self._action2id(action)
                 if action_id in current_node.children:
-                    current_node = current_node[action_id]
+                    current_node = current_node.children[action_id]
                 else:
-                    current_node = model._add_node(current_node, action_id)
+                    current_node = self._add_node(current_node, action_id)
                 node_path.append(current_node)
             else:  # The model's turn
                 # To be fixed
@@ -260,11 +256,11 @@ class MCT:
                     # Selection
                     while not test_terminal:
                         valid_actions = test_board.valid_actions
-                        explored_actions = {MCT._id2action(action_id) for action_id in test_current_node.children}
+                        explored_actions = {self._id2action(action_id) for action_id in test_current_node.children}
                         actions_to_be_explored = list(set(valid_actions) - explored_actions)
                         if len(actions_to_be_explored) > 0:
                             action = random.choice(actions_to_be_explored)
-                            test_current_node = model._add_node(test_current_node, action)
+                            test_current_node = self._add_node(test_current_node, action)
                             test_node_path.append(test_current_node)
                             test_terminal = test_board.take(*action, test_current_side)
                             test_current_side = test_board.next_side
@@ -279,7 +275,7 @@ class MCT:
                     # Simulation
                     while not test_terminal:
                         action = test_board.random_action()
-                        test_current_node = model._add_node(test_current_node, action)
+                        test_current_node = self._add_node(test_current_node, action)
                         test_node_path.append(test_current_node)
                         test_terminal = test_board.take(*action, test_current_side)
                         test_current_side = test_board.next_side

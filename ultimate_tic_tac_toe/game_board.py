@@ -219,6 +219,9 @@ class UltimateTicTacToe:
         else:
             raise ValueError("Invalid block selection. Block occupied.")
 
+    def get_state(self):
+        return np.copy(self._slots)
+
     @property
     def valid_actions(self):
         """

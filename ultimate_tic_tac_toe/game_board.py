@@ -38,25 +38,23 @@ class UltimateTicTacToe:
             """
             if not (row in range(3) and column in range(3)):
                 raise ValueError("Invalid coordinate.")
-            if self._slots[row, column] == SlotState.UNOCCUPIED:
-                if side == SlotState.PLAYER1 or side == SlotState.PLAYER2:
-                    self._num_filled_slots += 1
-                    self._slots[row, column] = int(side)
-                    # Search row, column and diagonals
-                    if (self._slots[row, 0] == self._slots[row, 1] == self._slots[row, 2]) \
-                        or (self._slots[0, column] == self._slots[1, column] == self._slots[2, column]) \
-                        or (row == column and self._slots[0, 0] == self._slots[1, 1] == self._slots[2, 2]) \
-                        or (row + column == 2 and self._slots[0, 2] == self._slots[1, 1] == self._slots[2, 0]):
-                        self._occupancy = side
-                        return True
-                    if self._num_filled_slots == 9:
-                        self._occupancy = BoardState.DRAW
-                        return True
-                    return False
-                else:
-                    raise ValueError("Invalid input for side.")
-            else:
+            if self._slots[row, column] != SlotState.UNOCCUPIED:
                 raise ValueError("The slot is already occupied!")
+            if not (side == SlotState.PLAYER1 or side == SlotState.PLAYER2):
+                raise ValueError("Invalid input for side.")
+            self._num_filled_slots += 1
+            self._slots[row, column] = int(side)
+            # Search row, column and diagonals
+            if (self._slots[row, 0] == self._slots[row, 1] == self._slots[row, 2]) \
+                or (self._slots[0, column] == self._slots[1, column] == self._slots[2, column]) \
+                or (row == column and self._slots[0, 0] == self._slots[1, 1] == self._slots[2, 2]) \
+                or (row + column == 2 and self._slots[0, 2] == self._slots[1, 1] == self._slots[2, 0]):
+                self._occupancy = BoardState(side)
+                return True
+            if self._num_filled_slots == 9:
+                self._occupancy = BoardState.DRAW
+                return True
+            return False
 
         @property
         def occupancy(self):
@@ -89,7 +87,7 @@ class UltimateTicTacToe:
         self._slots: np.ndarray = slots
         self._blocks: Tuple[Tuple[UltimateTicTacToe.TicTacToe]] = blocks
         self._next_player_side: Optional[BoardState] = next_player_side
-        self._next_block_coordinate: Tuple[int, int] = next_block_coordinate
+        self._next_block_coordinate: Optional[Tuple[int, int]] = next_block_coordinate
         self._num_filled_blocks = num_filled_blocks  # Total number of blocks that has been occupied.
         self._occupancy = occupancy
         if sovereignty_upon_draw in ("none", "both"):
@@ -117,7 +115,7 @@ class UltimateTicTacToe:
         blocks = split_board_into_blocks(slots)
         next_block_coordinate = None
         num_filled_blocks = 0  # Total number of blocks that has been occupied.
-        occupancy = None
+        occupancy = BoardState.UNOCCUPIED
         if not ("sovereignty_upon_draw" in kwargs):
             sovereignty_upon_draw = "none"
         elif kwargs["sovereignty_upon_draw"] in ("none", "both"):
@@ -175,49 +173,47 @@ class UltimateTicTacToe:
             raise ValueError("Invalid coordinate. ")
         if (self._next_block_coordinate is not None) and not ((row_block, column_block) == self._next_block_coordinate):
             raise ValueError("Rule violation. Invalid block. ")
-        if self._blocks[row_block][column_block].occupancy == BoardState.UNOCCUPIED:
-            if (side == SlotState.PLAYER1 or side == SlotState.PLAYER2) and (self._next_player_side == side):
-                terminal = self._blocks[row_block][column_block].take(row_slot, column_slot, side)
-                self._next_player_side = SlotState.PLAYER1 if side == SlotState.PLAYER2 else SlotState.PLAYER2
-                self._next_block_coordinate = None if self._blocks[row_slot][column_slot].occupancy != BoardState.UNOCCUPIED else (
-                    row_slot, column_slot)
-                if terminal:
-                    self._num_filled_blocks += 1
-                    horizontal = (self._blocks[row_block][0].occupancy, self._blocks[row_block][1].occupancy,
-                                  self._blocks[row_block][2].occupancy)
-                    vertical = (self._blocks[0][column_block].occupancy, self._blocks[1][column_block].occupancy,
-                                self._blocks[2][column_block].occupancy)
-                    diagonal1 = (
-                        self._blocks[0][0].occupancy, self._blocks[1][1].occupancy, self._blocks[2][2].occupancy)
-                    diagonal2 = (
-                        self._blocks[2][0].occupancy, self._blocks[1][1].occupancy, self._blocks[0][2].occupancy)
-                    if self._sovereignty_upon_draw == "both":
-                        horizontal = list(map(lambda x: x if x != BoardState.DRAW else side, horizontal))
-                        vertical = list(map(lambda x: x if x != BoardState.DRAW else side, vertical))
-                        diagonal1 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal1))
-                        diagonal2 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal2))
-                    # Search row, column and diagonal
-                    if (side == horizontal[0] == horizontal[1] == horizontal[2]) \
-                        or (side == vertical[0] == vertical[1] == vertical[2]) \
-                        or (row_block == column_block and side == diagonal1[0] == diagonal1[1] == diagonal1[2]) \
-                            or (row_block + column_block == 2 and side == diagonal2[0] == diagonal2[1] == diagonal2[2]):
-                        self._occupancy = side
-                        self._next_player_side = None
-                        self._next_block_coordinate = None
-                        return True
-                    elif self._num_filled_blocks == 9:
-                        self._occupancy = BoardState.DRAW
-                        self._next_player_side = None
-                        self._next_block_coordinate = None
-                        return True
-                    else:
-                        return False
-                else:
-                    return False  # The game continues.
-            else:
-                raise ValueError("Invalid input for side.")
-        else:
+        if self._blocks[row_block][column_block].occupancy != BoardState.UNOCCUPIED:
             raise ValueError("Invalid block selection. Block occupied.")
+        if not ((side == SlotState.PLAYER1 or side == SlotState.PLAYER2) and (self._next_player_side == side)):
+            raise ValueError("Invalid input for side.")
+        terminal = self._blocks[row_block][column_block].take(row_slot, column_slot, side)
+        self._next_player_side = SlotState.PLAYER1 if side == SlotState.PLAYER2 else SlotState.PLAYER2
+        self._next_block_coordinate = None if self._blocks[row_slot][column_slot].occupancy != BoardState.UNOCCUPIED else (
+            row_slot, column_slot)
+        if terminal:
+            self._num_filled_blocks += 1
+            horizontal = (self._blocks[row_block][0].occupancy, self._blocks[row_block][1].occupancy,
+                          self._blocks[row_block][2].occupancy)
+            vertical = (self._blocks[0][column_block].occupancy, self._blocks[1][column_block].occupancy,
+                        self._blocks[2][column_block].occupancy)
+            diagonal1 = (
+                self._blocks[0][0].occupancy, self._blocks[1][1].occupancy, self._blocks[2][2].occupancy)
+            diagonal2 = (
+                self._blocks[2][0].occupancy, self._blocks[1][1].occupancy, self._blocks[0][2].occupancy)
+            if self._sovereignty_upon_draw == "both":
+                horizontal = list(map(lambda x: x if x != BoardState.DRAW else side, horizontal))
+                vertical = list(map(lambda x: x if x != BoardState.DRAW else side, vertical))
+                diagonal1 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal1))
+                diagonal2 = list(map(lambda x: x if x != BoardState.DRAW else side, diagonal2))
+            # Search row, column and diagonal
+            if (side == horizontal[0] == horizontal[1] == horizontal[2]) \
+                or (side == vertical[0] == vertical[1] == vertical[2]) \
+                or (row_block == column_block and side == diagonal1[0] == diagonal1[1] == diagonal1[2]) \
+                    or (row_block + column_block == 2 and side == diagonal2[0] == diagonal2[1] == diagonal2[2]):
+                self._occupancy = BoardState(side)
+                self._next_player_side = None
+                self._next_block_coordinate = None
+                return True
+            elif self._num_filled_blocks == 9:
+                self._occupancy = BoardState.DRAW
+                self._next_player_side = None
+                self._next_block_coordinate = None
+                return True
+            else:
+                return False
+        else:
+            return False  # The game continues.
 
     def get_state(self):
         return np.copy(self._slots)
@@ -228,11 +224,10 @@ class UltimateTicTacToe:
         Return valid actions.
         :return: Return a list of actions [(block_row, block_column,slot_row,slot_column),...]
         """
-
-        if self._next_block_coordinate is None:
+        if self._occupancy != BoardState.UNOCCUPIED:
             actions = []
-            if self._occupancy is not None:
-                return actions
+        elif self._next_block_coordinate is None:
+            actions = []
             for outer_row in range(3):
                 for outer_column in range(3):
                     for inner_row, inner_column in self._blocks[outer_row][outer_column].valid_actions:

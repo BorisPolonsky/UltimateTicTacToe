@@ -9,7 +9,7 @@ import time
 import argparse
 import glob
 import re
-import os
+from collections import namedtuple
 
 
 class ExponentialMovingAverage:
@@ -166,6 +166,77 @@ def id2action(idx: int) -> Tuple[int, int, int, int]:
     return row_block, column_block, row_slot, column_slot
 
 
+class DataAugmentation:
+    def __init__(self):
+        self._state_index_mapping = self._get_state_index_mapping()
+
+    @classmethod
+    def rotate_90_cw(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
+        return column_block, 2 - row_block, column_slot, 2 - row_slot
+
+    @classmethod
+    def rotate_180_cw(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
+        return 2 - row_block, 2 - column_block, 2 - row_slot, 2 - column_slot
+
+    @classmethod
+    def rotate_270_cw(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
+        return 2 - column_block, row_block, 2 - column_slot, row_slot
+
+    @classmethod
+    def flip_horizontal(cls, row_block: int, column_block: int, row_slot: int, column_slot: int):
+        return row_block, 2 - column_block, row_slot, 2 - column_slot
+
+    def _get_state_index_mapping(self):
+        action_id = 0
+        out = {op_name: {new_action_id: 0} for op_name, new_action_id in self.action_augmentation(action_id).items()}
+        for action_id in range(1, 81):
+            for op_name, new_action_id in self.action_augmentation(action_id).items():
+                mapping = out[op_name]
+                mapping[new_action_id] = action_id
+        for op_name in out:
+            mapping = out[op_name]
+            out[op_name] = np.array([mapping[action_id] for action_id in range(81)])
+        return out
+
+    def action_augmentation(self, action_id: int):
+        action = id2action(action_id)
+        flipped_action = self.flip_horizontal(*action)
+        new_actions = {
+            "rotate_90_clockwise": self.rotate_90_cw(*action),
+            "rotate_180_clockwise": self.rotate_180_cw(*action),
+            "rotate_270_clockwise": self.rotate_270_cw(*action),
+            "flip_horizontal": flipped_action,
+            "flip_horizontal_rotate_90_clockwise": self.rotate_90_cw(*flipped_action),
+            "flip_horizontal_rotate_180_clockwise": self.rotate_180_cw(*flipped_action),
+            "flip_horizontal_rotate_270_clockwise": self.rotate_270_cw(*flipped_action)
+        }
+        return {k: action2id(*v) for k, v in new_actions.items()}
+
+    def action_sequence_augmentation(self, action_sequence):
+        out = {op_name: [] for op_name in self._state_index_mapping.keys()}
+        for action_id in action_sequence:
+            new_action_ids = self.action_augmentation(action_id)
+            for op_name in new_action_ids:
+                out[op_name].append(new_action_ids[op_name])
+        return out
+
+    def state_sequence_augmentation(self, state_sequence):
+        out = {op_name: [] for op_name in self._state_index_mapping.keys()}
+        for state in state_sequence:
+            new_states = self.state_augmentation(state)
+            for op_name in new_states:
+                out[op_name].append(new_states[op_name])
+        return out
+
+    def state_augmentation(self, state):
+        *dims, h, w, n_steps = list(state.shape)
+        flatten_view = state.reshape(dims + [81, n_steps])
+        out = {}
+        for action_name, indices in self._state_index_mapping.items():
+            out[action_name] = flatten_view[..., indices, :].reshape(dims + [9, 9, n_steps])
+        return out
+
+
 def get_checkpoints(checkpoint_dir: str):
     checkpoints = []
     for path in glob.iglob(os.path.join(checkpoint_dir, "checkpoint-*")):
@@ -218,6 +289,7 @@ def main(args):
 def train_fn(model_builder, output_dir, device, n_input_step: int):
     nn = model_builder()
     nn_current_best = model_builder()
+    Episode = namedtuple("Episode", ("state_history", "action_history", "reward_to_go"))
     try:
         ckpt_n_episode, path = get_last_checkpoint(output_dir)
         checkpoint = torch.load(path, map_location=device)
@@ -244,6 +316,7 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
     eval_every = 5000
     save_checkpoints_per_n_episode = 10000  # How often to save state dict
     save_checkpoints_per_n_seconds = 1 * 3600
+    data_augmentation = DataAugmentation()
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, mode=0o755)
     with SummaryWriter(os.path.join(output_dir, "log")) as writer:
@@ -253,16 +326,17 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
         n_episode_current_generation = prev_log_idx = prev_eval_idx = 0
         generation = 0
         batch_size = 128
+        batch = []
         for batch_i in range(num_batch):
             log_prob_history_1, log_prob_history_2 = [], []
             value_history = []
             value_history_1, value_history_2 = [], []
             policy_logits_history = []
             g = []
-            g1, g2 = [], []
-            for i in range(batch_size):
-                num_action = 0
-                board_layout_history = []
+            while len(batch) < batch_size:
+                # Simulate one episode
+                state_history = []
+                action_history = []
                 is_terminal = False
                 is_initiators_turn = True
                 board = UltimateTicTacToe.create_initial_board()
@@ -275,11 +349,11 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                         log_prob_history = log_prob_history_2
                         current_player_value_history = value_history_2
                     board_layout = board.get_state()
-                    board_layout_history.append(board_layout)
                     state_buff.append(board_layout)
                     state_buff = state_buff[-n_input_step:]
-                    num_action += 1
-                    batch_board_layout = torch.from_numpy(np.stack(state_buff, axis=-1)).to(dtype=torch.int64, device=device).unsqueeze(0)
+                    batch_board_layout = np.stack(state_buff, axis=-1)
+                    state_history.append(batch_board_layout)
+                    batch_board_layout = torch.from_numpy(batch_board_layout).to(dtype=torch.int64, device=device).unsqueeze(0)
                     batch_next_player = torch.tensor([0 if is_initiators_turn else 1], dtype=torch.int64, device=device)
                     valid_actions = sorted(map(lambda x: action2id(*x), board.valid_actions))
                     valid_actions = torch.tensor(valid_actions, device=device)
@@ -298,6 +372,7 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                     log_prob = m2.log_prob(action)  # Unmasked log_prob
 
                     is_terminal = board.take(*id2action(action.squeeze().item()), side=1 if is_initiators_turn else 2)
+                    action_history.append(action.squeeze().item())
                     policy_logits_history.append(policy_logits)
                     log_prob_history.append(log_prob)
                     value_history.append(values)
@@ -314,37 +389,86 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                 reward_ema.update(reward)
                 reward_to_go = []
                 r = reward
+                num_action = len(action_history)
                 for _ in range(num_action):
                     reward_to_go.insert(0, r)
                     r = r * gamma
-                reward_to_go = torch.tensor(reward_to_go, device=device)
-                g.append(reward_to_go)
-                g1.append(reward_to_go[torch.arange(0, reward_to_go.size(0), 2)])
-                g2.append(-reward_to_go[torch.arange(1, reward_to_go.size(0), 2)])
+                batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
+                                     action_history=np.array(action_history),
+                                     reward_to_go=np.array(reward_to_go, dtype=np.float32)))
+                # Data augmentation
+                action_history_augment = data_augmentation.action_sequence_augmentation(action_history)
+                state_history_augment = data_augmentation.state_sequence_augmentation(state_history)
+                for op_name in action_history_augment:
+                    action_history = action_history_augment[op_name]
+                    state_history = state_history_augment[op_name]
+                    batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
+                                         action_history=np.array(action_history),
+                                         reward_to_go=np.array(reward_to_go, dtype=np.float32)))
                 del reward_to_go
+
+            # Form a batch
+            batch_input_state = []
+            batch_action = []
+            batch_reward_to_go = []  # Reward to go w.r.t Player 1
+            batch_action_num = []
+            if len(batch) > batch_size:
+                batch = batch[:batch_size]
+            for item in batch:
+                batch_input_state.append(torch.from_numpy(item.state_history))
+                batch_action.append(torch.from_numpy(item.action_history))
+                batch_reward_to_go.append(torch.from_numpy(item.reward_to_go))
+                batch_action_num.append(len(item.action_history))
+            batch = []
+            # [batch_size]
+            batch_action_num = torch.tensor(batch_action_num)
+            # [batch_size, max_L_episode]
+            batch_reward_to_go = torch.nn.utils.rnn.pad_sequence(batch_reward_to_go, batch_first=True)
+            # [batch_size, max_L_episode]
+            batch_action = torch.nn.utils.rnn.pad_sequence(batch_action, batch_first=True)
+            # [batch_size, max_L_episode, 9, 9, n_history_step]
+            batch_input_state = torch.nn.utils.rnn.pad_sequence(batch_input_state, batch_first=True)
+
+            # [batch_size * max_L_episode]
+            batch_action_flatten = batch_action.flatten()
+            # [batch_size * max_L_episode, 9, 9, n_history_step]
+            batch_input_state_flatten = torch.flatten(batch_input_state, start_dim=0, end_dim=1)
+            max_l_episode = batch_input_state.size(1)
+            batch_player_id_flatten = (torch.arange(max_l_episode) % 2).repeat(batch_input_state.size(0))
+            batch_time_step_flatten = torch.arange(max_l_episode).repeat(batch_input_state.size(0))
+            batch_time_step_limit_flatten = batch_action_num.unsqueeze(-1).repeat(1, max_l_episode).flatten()
+            batch_valid_input_mask = batch_time_step_flatten < batch_time_step_limit_flatten
+            # Keep valid input/outputs only
+            batch_input_state_flatten = batch_input_state_flatten[batch_valid_input_mask].detach()
+            batch_player_id_flatten = batch_player_id_flatten[batch_valid_input_mask].detach()
+            batch_reward_to_go_flatten = batch_reward_to_go.flatten()[batch_valid_input_mask].detach()
+            batch_action_flatten = batch_action_flatten[batch_valid_input_mask].detach()
+            # Move tensors to devices
+            batch_input_state_flatten = batch_input_state_flatten.to(device=device)
+            batch_player_id_flatten = batch_player_id_flatten.to(device=device)
+            batch_reward_to_go_flatten = batch_reward_to_go_flatten.to(device=device)
+            batch_action_flatten = batch_action_flatten.to(device=device)
+            # policy_logits: [num_valid, 81], values: [num_valid]
+            unmasked_policy_logits, values = nn(batch_input_state_flatten, batch_player_id_flatten)
 
             num_episode += batch_size
             n_episode_current_generation += batch_size
 
-            log_prob_history_1 = torch.cat(log_prob_history_1)
-            log_prob_history_2 = torch.cat(log_prob_history_2)
-            g = torch.cat(g)
-            g1 = torch.cat(g1)
-            g2 = torch.cat(g2)
-            value_history = torch.cat(value_history)
-            value_history_1 = torch.cat(value_history_1)
-            value_history_2 = -torch.cat(value_history_2)  # value_for_p2 = -value_for_p1
-            policy_logits_history = torch.cat(policy_logits_history, dim=0)
-            policy_entropy = torch.distributions.Categorical(torch.softmax(policy_logits_history, dim=-1)).entropy()
-            # state_history = torch.from_numpy(np.stack(state_history))
-            # state_history_1 = state_history[torch.arange(0, state_history.size(0), 2)]
-            # state_history_2 = state_history[torch.arange(1, state_history.size(0), 2)]
-            p1_policy_loss = -torch.sum(torch.mul(log_prob_history_1, (g1 - value_history_1.detach()))) / batch_size
-            p2_policy_loss = -torch.sum(torch.mul(log_prob_history_2, (g2 - value_history_2.detach()))) / batch_size
+            m = torch.distributions.Categorical(logits=unmasked_policy_logits)
+            action_log_probs = m.log_prob(batch_action_flatten)
+            policy_entropy = m.entropy()
+            p1_mask = (batch_player_id_flatten == 0)
+            p2_mask = ~p1_mask
+            log_probs_p1 = action_log_probs[p1_mask]
+            log_probs_p2 = action_log_probs[p2_mask]
+            values_no_grad = values.detach()
+            advantage_p1 = batch_reward_to_go_flatten[p1_mask] - values_no_grad[p1_mask]
+            advantage_p2 = -batch_reward_to_go_flatten[p2_mask] + values_no_grad[p2_mask]  # value_p1 == -value_p2
+            p1_policy_loss = -torch.sum(torch.mul(log_probs_p1, advantage_p1)) / batch_size
+            p2_policy_loss = -torch.sum(torch.mul(log_probs_p2, advantage_p2)) / batch_size
             p_loss = p1_policy_loss + p2_policy_loss
-            v_loss = F.smooth_l1_loss(value_history, g, reduction="mean", beta=0.05)
+            v_loss = F.smooth_l1_loss(values, batch_reward_to_go_flatten, reduction="mean", beta=0.05)
             entropy_regularization_term = -torch.sum(policy_entropy) / batch_size
-            # Add illegal action loss?
             loss = p_loss + alpha_value_loss * v_loss + beta_policy_regularization * entropy_regularization_term
             # reset gradients
             optimizer.zero_grad()
@@ -352,7 +476,6 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
             optimizer.step()
             toc = time.time()
 
-            del board_layout_history, value_history_1, value_history_2, log_prob_history_1, log_prob_history_2
             if n_episode_current_generation - prev_log_idx > log_every:
                 prev_log_idx = n_episode_current_generation
                 writer.add_scalar("player1_policy_loss", p1_policy_loss.item(), num_episode)
@@ -361,7 +484,7 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                 writer.add_scalar("value_loss", v_loss.item(), num_episode)
                 writer.add_scalar("total_loss", loss.item(), num_episode)
                 writer.add_histogram("policy_entropy", policy_entropy, num_episode)  # max: 4.3944
-                writer.add_scalar("value_explained_variance", 1 - (value_history.detach() - g).var() / g.var(), num_episode)
+                writer.add_scalar("value_explained_variance", 1 - (values_no_grad.detach() - batch_reward_to_go_flatten).var() / batch_reward_to_go_flatten.var(), num_episode)
                 print("loss", loss.item(), "policy_loss", p_loss.item(), "p1_policy_loss", p1_policy_loss.item(),  "p2_policy_loss", p2_policy_loss.item(), "v_loss", v_loss.item())
                 print("Reward for Player1 (EMA):", reward_ema.result())
             if (n_episode_current_generation - prev_eval_idx) > eval_every:
@@ -403,8 +526,7 @@ def eval_fn(model_builder, output_dir, device, input_step_size, n_episode):
     nn.to(device)
     nn.eval()
     nn1 = nn2 = nn
-    nn1_input_step_size = nn2_input_step_size = input_step_size
-    result = eval_network(nn1, nn1_input_step_size, nn2, nn2_input_step_size, device, n_episode=n_episode)
+    result = eval_network(nn1, input_step_size, nn2, input_step_size, device, n_episode=n_episode)
     print(result)
 
 

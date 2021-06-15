@@ -236,6 +236,15 @@ class DataAugmentation:
             out[action_name] = flatten_view[..., indices, :].reshape(dims + [9, 9, n_steps])
         return out
 
+    def valid_action_augmentation(self, valid_action_set_sequence, sort=False):
+        out = {op_name: [] for op_name in self._state_index_mapping.keys()}
+        for valid_action_ids_at_t in valid_action_set_sequence:
+            for op_name, new_valid_action_ids_at_t in self.action_sequence_augmentation(valid_action_ids_at_t).items():
+                if sort:
+                    new_valid_action_ids_at_t = sorted(new_valid_action_ids_at_t)
+                out[op_name].append(new_valid_action_ids_at_t)
+        return out
+
 
 def get_checkpoints(checkpoint_dir: str):
     checkpoints = []
@@ -289,7 +298,7 @@ def main(args):
 def train_fn(model_builder, output_dir, device, n_input_step: int):
     nn = model_builder()
     nn_current_best = model_builder()
-    Episode = namedtuple("Episode", ("state_history", "action_history", "reward_to_go"))
+    Episode = namedtuple("Episode", ("state_history", "action_history", "reward_to_go", "valid_action_history"))
     try:
         ckpt_n_episode, path = get_last_checkpoint(output_dir)
         checkpoint = torch.load(path, map_location=device)
@@ -312,7 +321,7 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
     alpha_value_loss = 10
     beta_policy_regularization = 0
     sma_window_size = 100
-    log_every = 100
+    log_every = 1000
     eval_every = 5000
     save_checkpoints_per_n_episode = 10000  # How often to save state dict
     save_checkpoints_per_n_seconds = 1 * 3600
@@ -328,26 +337,16 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
         batch_size = 128
         batch = []
         for batch_i in range(num_batch):
-            log_prob_history_1, log_prob_history_2 = [], []
-            value_history = []
-            value_history_1, value_history_2 = [], []
-            policy_logits_history = []
-            g = []
             while len(batch) < batch_size:
                 # Simulate one episode
                 state_history = []
                 action_history = []
+                valid_action_history = []
                 is_terminal = False
                 is_initiators_turn = True
                 board = UltimateTicTacToe.create_initial_board()
                 state_buff = [board.get_state() for _ in range(n_input_step - 1)]
                 while not is_terminal:
-                    if is_initiators_turn:
-                        log_prob_history = log_prob_history_1
-                        current_player_value_history = value_history_1
-                    else:
-                        log_prob_history = log_prob_history_2
-                        current_player_value_history = value_history_2
                     board_layout = board.get_state()
                     state_buff.append(board_layout)
                     state_buff = state_buff[-n_input_step:]
@@ -356,13 +355,12 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                     batch_board_layout = torch.from_numpy(batch_board_layout).to(dtype=torch.int64, device=device).unsqueeze(0)
                     batch_next_player = torch.tensor([0 if is_initiators_turn else 1], dtype=torch.int64, device=device)
                     valid_actions = sorted(map(lambda x: action2id(*x), board.valid_actions))
+                    valid_action_history.append(valid_actions)
                     valid_actions = torch.tensor(valid_actions, device=device)
                     policy_logits, values = nn(batch_board_layout, batch_next_player)
                     valid_policy_logits = policy_logits[:, valid_actions]
                     # create a categorical distribution over the list of probabilities of actions
-                    valid_probs = torch.softmax(valid_policy_logits, dim=-1)
-                    # print(batch, policy_logits, valid_probs)
-                    m1 = torch.distributions.Categorical(valid_probs)
+                    m1 = torch.distributions.Categorical(logits=valid_policy_logits)
 
                     # and sample an action using the distribution
                     action = m1.sample()
@@ -373,11 +371,6 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
 
                     is_terminal = board.take(*id2action(action.squeeze().item()), side=1 if is_initiators_turn else 2)
                     action_history.append(action.squeeze().item())
-                    policy_logits_history.append(policy_logits)
-                    log_prob_history.append(log_prob)
-                    value_history.append(values)
-                    current_player_value_history.append(values)
-
                     is_initiators_turn = not is_initiators_turn
 
                 # Calculate reward
@@ -395,16 +388,20 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                     r = r * gamma
                 batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
                                      action_history=np.array(action_history),
-                                     reward_to_go=np.array(reward_to_go, dtype=np.float32)))
+                                     reward_to_go=np.array(reward_to_go, dtype=np.float32),
+                                     valid_action_history=valid_action_history))
                 # Data augmentation
                 action_history_augment = data_augmentation.action_sequence_augmentation(action_history)
                 state_history_augment = data_augmentation.state_sequence_augmentation(state_history)
+                valid_action_history_augment = data_augmentation.valid_action_augmentation(valid_action_history, sort=True)
                 for op_name in action_history_augment:
                     action_history = action_history_augment[op_name]
                     state_history = state_history_augment[op_name]
+                    valid_action_history = valid_action_history_augment[op_name]
                     batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
                                          action_history=np.array(action_history),
-                                         reward_to_go=np.array(reward_to_go, dtype=np.float32)))
+                                         reward_to_go=np.array(reward_to_go, dtype=np.float32),
+                                         valid_action_history=valid_action_history))
                 del reward_to_go
 
             # Form a batch
@@ -412,51 +409,66 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
             batch_action = []
             batch_reward_to_go = []  # Reward to go w.r.t Player 1
             batch_action_num = []
+            batch_valid_action_ids = []
             if len(batch) > batch_size:
                 batch = batch[:batch_size]
+            max_l_episode = 0
             for item in batch:
+                action_num = len(item.action_history)
+                max_l_episode = max(max_l_episode, action_num)
+                batch_action_num.append(action_num)
                 batch_input_state.append(torch.from_numpy(item.state_history))
                 batch_action.append(torch.from_numpy(item.action_history))
                 batch_reward_to_go.append(torch.from_numpy(item.reward_to_go))
-                batch_action_num.append(len(item.action_history))
+                batch_valid_action_ids.append(item.valid_action_history)
             batch = []
             # [batch_size]
             batch_action_num = torch.tensor(batch_action_num)
-            # [batch_size, max_L_episode]
-            batch_reward_to_go = torch.nn.utils.rnn.pad_sequence(batch_reward_to_go, batch_first=True)
-            # [batch_size, max_L_episode]
-            batch_action = torch.nn.utils.rnn.pad_sequence(batch_action, batch_first=True)
-            # [batch_size, max_L_episode, 9, 9, n_history_step]
-            batch_input_state = torch.nn.utils.rnn.pad_sequence(batch_input_state, batch_first=True)
-
-            # [batch_size * max_L_episode]
-            batch_action_flatten = batch_action.flatten()
-            # [batch_size * max_L_episode, 9, 9, n_history_step]
-            batch_input_state_flatten = torch.flatten(batch_input_state, start_dim=0, end_dim=1)
-            max_l_episode = batch_input_state.size(1)
-            batch_player_id_flatten = (torch.arange(max_l_episode) % 2).repeat(batch_input_state.size(0))
-            batch_time_step_flatten = torch.arange(max_l_episode).repeat(batch_input_state.size(0))
+            # [L]
+            batch_action_flatten = torch.cat(batch_action)
+            # [L, 9, 9, n_history_step]
+            batch_input_state_flatten = torch.cat(batch_input_state, dim=0)
+            # # [L]
+            batch_reward_to_go_flatten = torch.cat(batch_reward_to_go).detach()
+            # Get player_id
+            batch_player_id_flatten = (torch.arange(max_l_episode) % 2).repeat(batch_size)
+            batch_time_step_flatten = torch.arange(max_l_episode).repeat(batch_size)
             batch_time_step_limit_flatten = batch_action_num.unsqueeze(-1).repeat(1, max_l_episode).flatten()
             batch_valid_input_mask = batch_time_step_flatten < batch_time_step_limit_flatten
-            # Keep valid input/outputs only
-            batch_input_state_flatten = batch_input_state_flatten[batch_valid_input_mask].detach()
             batch_player_id_flatten = batch_player_id_flatten[batch_valid_input_mask].detach()
-            batch_reward_to_go_flatten = batch_reward_to_go.flatten()[batch_valid_input_mask].detach()
-            batch_action_flatten = batch_action_flatten[batch_valid_input_mask].detach()
+            del batch_time_step_flatten, batch_time_step_limit_flatten, batch_valid_input_mask
+            # Get valid action mask
+            sparse_indices = []
+            idx_dim0 = 0
+            for valid_action_history in batch_valid_action_ids:
+                for valid_actions_at_t in valid_action_history:
+                    for idx_dim1 in valid_actions_at_t:
+                        sparse_indices.append([idx_dim0, idx_dim1])
+                    idx_dim0 += 1
+            assert idx_dim0 == batch_action_flatten.size(0)
+            sparse_values = torch.tensor([1] * len(sparse_indices), dtype=torch.int32)
+            sparse_indices = torch.tensor(sparse_indices).T  # [2, L]
+            valid_action_mask_sparse = torch.sparse_coo_tensor(sparse_indices, sparse_values, [idx_dim0, 81])
+            valid_action_mask = (valid_action_mask_sparse.to_dense() == 1)
+            del sparse_indices, sparse_values, idx_dim0, idx_dim1, valid_action_mask_sparse
             # Move tensors to devices
             batch_input_state_flatten = batch_input_state_flatten.to(device=device)
             batch_player_id_flatten = batch_player_id_flatten.to(device=device)
             batch_reward_to_go_flatten = batch_reward_to_go_flatten.to(device=device)
             batch_action_flatten = batch_action_flatten.to(device=device)
-            # policy_logits: [num_valid, 81], values: [num_valid]
+            valid_action_mask = valid_action_mask.to(device=device)
+            # unmasked_policy_logits: [L, 81], values: [L]
             unmasked_policy_logits, values = nn(batch_input_state_flatten, batch_player_id_flatten)
-
+            invalid_action_logits = torch.empty_like(unmasked_policy_logits)
+            torch.fill_(invalid_action_logits, -50000)
+            masked_policy_logits = torch.where(valid_action_mask, unmasked_policy_logits, invalid_action_logits)
             num_episode += batch_size
             n_episode_current_generation += batch_size
 
-            m = torch.distributions.Categorical(logits=unmasked_policy_logits)
-            action_log_probs = m.log_prob(batch_action_flatten)
-            policy_entropy = m.entropy()
+            m_unmasked = torch.distributions.Categorical(logits=policy_logits)
+            m_masked = torch.distributions.Categorical(logits=masked_policy_logits)
+            action_log_probs = m_masked.log_prob(batch_action_flatten)
+            policy_entropy = m_unmasked.entropy()
             p1_mask = (batch_player_id_flatten == 0)
             p2_mask = ~p1_mask
             log_probs_p1 = action_log_probs[p1_mask]
@@ -498,7 +510,8 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                 current_best_nn_win_rate = (nn_as_p1_result["n_p2_wins"] + nn_as_p2_result["n_p1_wins"]) / (2 * n_eval_per_role)
                 smoothed_nn_win_rate = (nn_as_p1_result["n_p1_wins"] + nn_as_p2_result["n_p2_wins"] + 0.5 * (nn_as_p1_result["n_draw"] + nn_as_p2_result["n_draw"])) / (2 * n_eval_per_role)
                 print("win_rate_as_p1", nn_as_p1_win_rate, "win_rate_as_p2", nn_as_p2_win_rate, "smoothed_nn_win_rate", smoothed_nn_win_rate)
-                accept_new_network = (current_best_nn_win_rate == 0 and nn_win_rate > 0) or smoothed_nn_win_rate > 0.55 # nn_win_rate / current_best_nn_win_rate > 1.2
+                # accept_new_network = (current_best_nn_win_rate == 0 and nn_win_rate > 0) or smoothed_nn_win_rate > 0.55 # nn_win_rate / current_best_nn_win_rate > 1.2
+                accept_new_network = (nn_as_p1_win_rate > 0.55) and (nn_as_p2_win_rate > 0.55)
                 if accept_new_network:
                     nn_current_best.load_state_dict(nn.state_dict())
                     generation += 1
@@ -519,14 +532,13 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
 
 
 def eval_fn(model_builder, output_dir, device, input_step_size, n_episode):
-    nn = model_builder()
+    nn = model_builder
     ckpt_n_episode, path = get_last_checkpoint(output_dir)
     checkpoint = torch.load(path, map_location=device)
     nn.load_state_dict(checkpoint["current_best"])
     nn.to(device)
     nn.eval()
-    nn1 = nn2 = nn
-    result = eval_network(nn1, input_step_size, nn2, input_step_size, device, n_episode=n_episode)
+    result = eval_network(nn, input_step_size, nn, input_step_size, device, n_episode=n_episode)
     print(result)
 
 

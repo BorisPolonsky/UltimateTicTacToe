@@ -152,6 +152,20 @@ class ActorCritic(torch.nn.Module):
         return policy_logits, value
 
 
+class UniformRandomSamplingNN(torch.nn.Module):
+    """An agent equivalent to uniform random sampling"""
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, board_layout: torch.Tensor, next_player: torch.Tensor):
+        batch_size = board_layout.size(0)
+        device = board_layout.device
+        dtype = torch.float32
+        policy = torch.zeros([batch_size, 81], dtype=dtype, device=device)
+        value = torch.zeros([batch_size], dtype=dtype, device=device)
+        return policy, value
+
+
 def action2id(row_block: int, column_block: int, row_slot: int, column_slot: int):
     row = row_block * 3 + row_slot
     column = column_block * 3 + column_slot
@@ -272,8 +286,6 @@ def get_model_builder(input_step):
 
 def main(args):
     output_dir = args.output_dir
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
     input_step_size = 2
     model_builder = get_model_builder(input_step_size)
     if args.do_train:
@@ -314,18 +326,19 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
     nn_current_best.to(device)
     num_batch = 1000000
     gamma = 0.98
+    alpha_l2_regularization = 1e-2
     # optimizer = torch.optim.SGD(nn.parameters(), lr=2e-4)
-    optimizer = torch.optim.AdamW(nn.parameters(), lr=2e-5)
+    optimizer = torch.optim.AdamW(nn.parameters(), lr=2e-5, weight_decay=alpha_l2_regularization)
     # torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1, verbose=False)
     alpha_ema = 0.3
     alpha_value_loss = 10
-    beta_policy_regularization = 0
-    sma_window_size = 100
+    beta_policy_regularization = 2e-3
     log_every = 1000
     eval_every = 5000
     save_checkpoints_per_n_episode = 10000  # How often to save state dict
     save_checkpoints_per_n_seconds = 1 * 3600
     data_augmentation = DataAugmentation()
+    augment_data = True
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, mode=0o755)
     with SummaryWriter(os.path.join(output_dir, "log")) as writer:
@@ -357,22 +370,18 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                     valid_actions = sorted(map(lambda x: action2id(*x), board.valid_actions))
                     valid_action_history.append(valid_actions)
                     valid_actions = torch.tensor(valid_actions, device=device)
-                    policy_logits, values = nn(batch_board_layout, batch_next_player)
+                    with torch.no_grad():
+                        policy_logits, values = nn(batch_board_layout, batch_next_player)
                     valid_policy_logits = policy_logits[:, valid_actions]
                     # create a categorical distribution over the list of probabilities of actions
                     m1 = torch.distributions.Categorical(logits=valid_policy_logits)
-
                     # and sample an action using the distribution
                     action = m1.sample()
-                    # log_prob = m1.log_prob(action) # Masked log_prob
                     action = valid_actions[action]
-                    m2 = torch.distributions.Categorical(torch.softmax(policy_logits, dim=-1))
-                    log_prob = m2.log_prob(action)  # Unmasked log_prob
-
                     is_terminal = board.take(*id2action(action.squeeze().item()), side=1 if is_initiators_turn else 2)
                     action_history.append(action.squeeze().item())
                     is_initiators_turn = not is_initiators_turn
-
+                    del valid_policy_logits, policy_logits, values, action, valid_actions, batch_board_layout, batch_next_player
                 # Calculate reward
                 reward = 0
                 if board.occupancy == BoardState.OCCUPIED_BY_PLAYER1:
@@ -391,17 +400,18 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
                                      reward_to_go=np.array(reward_to_go, dtype=np.float32),
                                      valid_action_history=valid_action_history))
                 # Data augmentation
-                action_history_augment = data_augmentation.action_sequence_augmentation(action_history)
-                state_history_augment = data_augmentation.state_sequence_augmentation(state_history)
-                valid_action_history_augment = data_augmentation.valid_action_augmentation(valid_action_history, sort=True)
-                for op_name in action_history_augment:
-                    action_history = action_history_augment[op_name]
-                    state_history = state_history_augment[op_name]
-                    valid_action_history = valid_action_history_augment[op_name]
-                    batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
-                                         action_history=np.array(action_history),
-                                         reward_to_go=np.array(reward_to_go, dtype=np.float32),
-                                         valid_action_history=valid_action_history))
+                if augment_data:
+                    action_history_augment = data_augmentation.action_sequence_augmentation(action_history)
+                    state_history_augment = data_augmentation.state_sequence_augmentation(state_history)
+                    valid_action_history_augment = data_augmentation.valid_action_augmentation(valid_action_history, sort=True)
+                    for op_name in action_history_augment:
+                        action_history = action_history_augment[op_name]
+                        state_history = state_history_augment[op_name]
+                        valid_action_history = valid_action_history_augment[op_name]
+                        batch.append(Episode(state_history=np.stack(state_history, axis=0),  # [L_episode, 9, 9, n_history_step]
+                                             action_history=np.array(action_history),
+                                             reward_to_go=np.array(reward_to_go, dtype=np.float32),
+                                             valid_action_history=valid_action_history))
                 del reward_to_go
 
             # Form a batch
@@ -461,26 +471,31 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
             unmasked_policy_logits, values = nn(batch_input_state_flatten, batch_player_id_flatten)
             invalid_action_logits = torch.empty_like(unmasked_policy_logits)
             torch.fill_(invalid_action_logits, -50000)
+            # masked_policy_logits: [L, 81], values: [L]
             masked_policy_logits = torch.where(valid_action_mask, unmasked_policy_logits, invalid_action_logits)
             num_episode += batch_size
             n_episode_current_generation += batch_size
 
-            m_unmasked = torch.distributions.Categorical(logits=policy_logits)
+            m_unmasked = torch.distributions.Categorical(logits=unmasked_policy_logits)
             m_masked = torch.distributions.Categorical(logits=masked_policy_logits)
             action_log_probs = m_masked.log_prob(batch_action_flatten)
-            policy_entropy = m_unmasked.entropy()
+            # action_log_probs = m_unmasked.log_prob(batch_action_flatten)
+            unmasked_policy_entropy = m_unmasked.entropy()
+            masked_policy_entropy = m_masked.entropy()
             p1_mask = (batch_player_id_flatten == 0)
             p2_mask = ~p1_mask
+            n_action_p1 = torch.sum(p1_mask.to(torch.int64)).item()
+            n_action_p2 = torch.sum(p2_mask.to(torch.int64)).item()
             log_probs_p1 = action_log_probs[p1_mask]
             log_probs_p2 = action_log_probs[p2_mask]
             values_no_grad = values.detach()
             advantage_p1 = batch_reward_to_go_flatten[p1_mask] - values_no_grad[p1_mask]
             advantage_p2 = -batch_reward_to_go_flatten[p2_mask] + values_no_grad[p2_mask]  # value_p1 == -value_p2
-            p1_policy_loss = -torch.sum(torch.mul(log_probs_p1, advantage_p1)) / batch_size
-            p2_policy_loss = -torch.sum(torch.mul(log_probs_p2, advantage_p2)) / batch_size
-            p_loss = p1_policy_loss + p2_policy_loss
+            p1_policy_loss_unnormalized = -torch.sum(torch.mul(log_probs_p1, advantage_p1))
+            p2_policy_loss_unnormalized = -torch.sum(torch.mul(log_probs_p2, advantage_p2))
+            p_loss = (p1_policy_loss_unnormalized + p2_policy_loss_unnormalized) / batch_size
             v_loss = F.smooth_l1_loss(values, batch_reward_to_go_flatten, reduction="mean", beta=0.05)
-            entropy_regularization_term = -torch.sum(policy_entropy) / batch_size
+            entropy_regularization_term = -torch.sum(unmasked_policy_entropy) / batch_size
             loss = p_loss + alpha_value_loss * v_loss + beta_policy_regularization * entropy_regularization_term
             # reset gradients
             optimizer.zero_grad()
@@ -490,14 +505,19 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
 
             if n_episode_current_generation - prev_log_idx > log_every:
                 prev_log_idx = n_episode_current_generation
-                writer.add_scalar("player1_policy_loss", p1_policy_loss.item(), num_episode)
-                writer.add_scalar("player2_policy_loss", p2_policy_loss.item(), num_episode)
+                writer.add_scalar("player1_policy_loss", (p1_policy_loss_unnormalized / batch_size).item(), num_episode)
+                writer.add_scalar("player2_policy_loss", (p2_policy_loss_unnormalized / batch_size).item(), num_episode)
                 writer.add_scalar("policy_loss", p_loss.item(), num_episode)
                 writer.add_scalar("value_loss", v_loss.item(), num_episode)
                 writer.add_scalar("total_loss", loss.item(), num_episode)
-                writer.add_histogram("policy_entropy", policy_entropy, num_episode)  # max: 4.3944
-                writer.add_scalar("value_explained_variance", 1 - (values_no_grad.detach() - batch_reward_to_go_flatten).var() / batch_reward_to_go_flatten.var(), num_episode)
-                print("loss", loss.item(), "policy_loss", p_loss.item(), "p1_policy_loss", p1_policy_loss.item(),  "p2_policy_loss", p2_policy_loss.item(), "v_loss", v_loss.item())
+                writer.add_histogram("unmasked_policy_entropy", unmasked_policy_entropy, num_episode)  # max: 4.3944
+                writer.add_histogram("policy_entropy", masked_policy_entropy, num_episode)
+                writer.add_histogram("unmasked_policy_entropy_p1", unmasked_policy_entropy[p1_mask], num_episode)
+                writer.add_histogram("unmasked_policy_entropy_p2", unmasked_policy_entropy[p2_mask], num_episode)
+                writer.add_histogram("policy_entropy_p1", masked_policy_entropy[p1_mask], num_episode)
+                writer.add_histogram("policy_entropy_p2", masked_policy_entropy[p2_mask], num_episode)
+                writer.add_scalar("value_explained_variance", 1 - (values_no_grad.detach() - batch_reward_to_go_flatten).var() / (1e-9 + batch_reward_to_go_flatten.var()), num_episode)
+                print("loss", loss.item(), "policy_loss", p_loss.item(), "p1_policy_loss", p1_policy_loss_unnormalized.item(),  "p2_policy_loss", p2_policy_loss_unnormalized.item(), "v_loss", v_loss.item())
                 print("Reward for Player1 (EMA):", reward_ema.result())
             if (n_episode_current_generation - prev_eval_idx) > eval_every:
                 prev_eval_idx = n_episode_current_generation
@@ -532,13 +552,22 @@ def train_fn(model_builder, output_dir, device, n_input_step: int):
 
 
 def eval_fn(model_builder, output_dir, device, input_step_size, n_episode):
-    nn = model_builder
+    nn = model_builder()
     ckpt_n_episode, path = get_last_checkpoint(output_dir)
     checkpoint = torch.load(path, map_location=device)
     nn.load_state_dict(checkpoint["current_best"])
     nn.to(device)
     nn.eval()
+    print("Evaluating: Self-play")
     result = eval_network(nn, input_step_size, nn, input_step_size, device, n_episode=n_episode)
+    print(result)
+    nn_random_sampling = UniformRandomSamplingNN()
+    nn_random_sampling.to(device)
+    print("Evaluating: Player1(nn) vs. Player2(Uniform-Random-Sampling)")
+    result = eval_network(nn, input_step_size, nn_random_sampling, input_step_size, device, n_episode=n_episode)
+    print(result)
+    print("Evaluating: Player1(Uniform-Random-Sampling) vs. Player2(nn)")
+    result = eval_network(nn_random_sampling, input_step_size, nn, input_step_size, device, n_episode=n_episode)
     print(result)
 
 
@@ -565,7 +594,7 @@ def visualize(model_builder, output_dir, device, input_step_size: int):
     nn = model_builder()
     ckpt_n_episode, path = get_last_checkpoint(output_dir)
     checkpoint = torch.load(path, map_location=device)
-    nn.load_state_dict(checkpoint["edge"])
+    nn.load_state_dict(checkpoint["current_best"])
     nn.to(device)
     nn.eval()
     nn1 = nn2 = nn
@@ -668,7 +697,7 @@ def interactive_test(model_builder, output_dir, device, input_step_size):
     nn = model_builder()
     ckpt_n_episode, path = get_last_checkpoint(output_dir)
     checkpoint = torch.load(path, map_location=device)
-    nn.load_state_dict(checkpoint["edge"])
+    nn.load_state_dict(checkpoint["current_best"])
     nn.to(device)
     nn.eval()
     nn1 = nn2 = nn

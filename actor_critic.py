@@ -604,7 +604,7 @@ def train_fn(env, model_builder, output_dir, device, n_input_step: int):
                     reward_ema = ExponentialMovingAverage(alpha_ema)
                     n_episode_current_generation = prev_log_idx = prev_eval_idx = 0
 
-            if (toc - tic) > save_checkpoints_per_n_seconds or (num_episode - prev_save_idx > save_checkpoints_per_n_episode):
+            if accept_new_network or (toc - tic) > save_checkpoints_per_n_seconds or (num_episode - prev_save_idx > save_checkpoints_per_n_episode):
                 tic = time.time()
                 checkpoint = {"current_best": nn_current_best.state_dict(), "edge": nn.state_dict()}
                 torch.save(checkpoint, os.path.join(output_dir, "checkpoint-{}.pt".format(num_episode)))

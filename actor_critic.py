@@ -396,9 +396,28 @@ def train_fn(env, model_builder, output_dir, device, n_input_step: int):
     num_batch = 1000000
     gamma = 0.98
     alpha_l2_regularization = 1e-2
-    # optimizer = torch.optim.SGD(nn.parameters(), lr=2e-4)
-    optimizer = torch.optim.AdamW(nn.parameters(), lr=2e-5, weight_decay=alpha_l2_regularization)
+    weight_p, bias_p = [], []
+    weight_name, bias_name = [], []
+    for name, param in nn.named_parameters():
+        if name.endswith("bias"):
+            bias_p.append(param)
+            bias_name.append(name)
+        else:
+            weight_p.append(param)
+            weight_name.append(name)
+    print("The following parameters will be optimized WITH decay")
+    print("\n".join(weight_name))
+    print("The following parameters will be optimized WITHOUT decay")
+    print("\n".join(bias_name))
+    param_optim_config = [
+            {'params': weight_p, 'weight_decay': alpha_l2_regularization},
+            {'params': bias_p, 'weight_decay': 0}
+        ]
+    # optimizer = torch.optim.SGD(param_optim_config, lr=2e-4)
+    optimizer = torch.optim.AdamW(param_optim_config, lr=2e-5, weight_decay=alpha_l2_regularization)
     # torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1, verbose=False)
+    del weight_p, bias_p, weight_name, bias_name, param_optim_config
+
     alpha_ema = 0.3
     alpha_value_loss = 10
     beta_policy_regularization = 2e-3

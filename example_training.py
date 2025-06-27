@@ -28,10 +28,11 @@ def play_game(env, agent1, agent2, render=False):
     observation, info = env.reset()
     total_reward = 0
     step_count = 0
+    terminated = False
     
-    while True:
-        # Determine current agent
-        current_agent = agent1 if env.board.next_player == env.initiator else agent2
+    while not terminated:
+        # Determine current agent based on info from environment
+        current_agent = agent1 if info['next_player'] == env.initiator else agent2
         
         # Get valid actions
         valid_actions = env.get_valid_actions()
@@ -40,8 +41,24 @@ def play_game(env, agent1, agent2, render=False):
         action = current_agent.get_action(observation, valid_actions)
         
         if action is None:
-            print("No valid actions available!")
-            break
+            # Check if the game should be terminated based on info
+            if not info['game_over']:
+                # This is a bug - no valid actions but game isn't over
+                error_msg = (
+                    f"Environment bug detected! No valid actions available but game is not over.\n"
+                    f"Step: {step_count}\n"
+                    f"Next player: {info['next_player']}\n"
+                    f"Next block: {info['next_block']}\n"
+                    f"Game over: {info['game_over']}\n"
+                    f"Winner: {info['winner']}\n"
+                    f"Valid moves count: {np.sum(valid_actions)}\n"
+                    f"Board state:\n{env.board}"
+                )
+                raise RuntimeError(error_msg)
+            else:
+                # Game is over, no valid actions expected
+                print("Game ended - no valid actions available.")
+                break
         
         # Take step
         observation, reward, terminated, truncated, info = env.step(action)
@@ -49,19 +66,17 @@ def play_game(env, agent1, agent2, render=False):
         step_count += 1
         
         if render:
-            print(f"Step {step_count}: Player {env.board.next_player} (3-{env.board.next_player})")
+            print(f"Step {step_count}: Player {info['next_player']} (3-{info['next_player']})")
             print(f"Action: {action}")
             print(f"Reward: {reward}")
             env.render()
             print()
         
-        if terminated:
-            if render:
-                if info['winner'] == 0:
-                    print("Game ended in a draw!")
-                else:
-                    print(f"Player {info['winner']} wins!")
-            break
+    if render:
+        if info['winner'] == 0:
+            print("Game ended in a draw!")
+        else:
+            print(f"Player {info['winner']} wins!")
     
     return total_reward, step_count, info['winner']
 

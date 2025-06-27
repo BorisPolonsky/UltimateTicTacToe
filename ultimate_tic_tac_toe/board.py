@@ -6,7 +6,7 @@ import random
 class Board:
     """
     Ultimate Tic-Tac-Toe board represented as a 9x9 numpy array.
-    0 = empty, 1 = initiator (X), 2 = opponent (O)
+    0 = empty, 1 = player 1 (initiator), 2 = player 2
     """
     
     def __init__(self, initiator: int = 1, sovereignty_upon_draw: str = "none"):
@@ -14,7 +14,7 @@ class Board:
         Initialize the board.
         
         Args:
-            initiator: 1 for X (initiator), 2 for O (opponent)
+            initiator: 1 for player 1 (initiator), 2 for player 2
             sovereignty_upon_draw: "none" or "both" for rule variants
         """
         self.board = np.zeros((9, 9), dtype=np.int8)
@@ -24,7 +24,7 @@ class Board:
         self.winner = None
         self.sovereignty_upon_draw = sovereignty_upon_draw
         
-        # Track completed blocks (0=empty, 1=X, 2=O, 3=draw)
+        # Track completed blocks (0=empty, 1=player1, 2=player2, 3=draw)
         self.block_status = np.zeros((3, 3), dtype=np.int8)
         self.num_filled_blocks = 0
     
@@ -111,7 +111,7 @@ class Board:
         return False
     
     def _check_block_winner(self, block: np.ndarray) -> int:
-        """Check if a 3x3 block has a winner. Returns 0 (no winner), 1 (X), 2 (O), or 3 (draw)."""
+        """Check if a 3x3 block has a winner. Returns 0 (no winner), 1 (player1), 2 (player2), or 3 (draw)."""
         # Check rows
         for row in range(3):
             if block[row, 0] != 0 and block[row, 0] == block[row, 1] == block[row, 2]:
@@ -241,11 +241,11 @@ class Board:
         symbols = []
         for cell in row:
             if cell == 0:
-                symbols.append(" ")
+                symbols.append(" ")  # Empty
             elif cell == 1:
-                symbols.append("X")
+                symbols.append("X")  # Player 1
             else:
-                symbols.append("O")
+                symbols.append("O")  # Player 2
         return symbols
     
     def __repr__(self) -> str:

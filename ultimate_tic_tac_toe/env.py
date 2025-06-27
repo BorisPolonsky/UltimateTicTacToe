@@ -23,7 +23,7 @@ class UltimateTicTacToeEnv(gym.Env):
         Initialize the environment.
         
         Args:
-            initiator: 1 for X (initiator), 2 for O (opponent)
+            initiator: 1 for player 1 (initiator), 2 for player 2
             sovereignty_upon_draw: "none" or "both" for rule variants
             render_mode: "human" or "rgb_array"
         """
@@ -44,7 +44,7 @@ class UltimateTicTacToeEnv(gym.Env):
         
         # Additional observation info
         self.info_space = spaces.Dict({
-            'block_status': spaces.Box(low=0, high=3, shape=(3, 3), dtype=np.int8),
+            'block_status': spaces.Box(low=0, high=3, shape=(3, 3), dtype=np.int8),  # 0=empty, 1=player1, 2=player2, 3=draw
             'next_player': spaces.Discrete(3),  # 0=game_over, 1=player1, 2=player2
             'next_block': spaces.Tuple((spaces.Discrete(3), spaces.Discrete(3))),
             'valid_moves': spaces.Box(low=0, high=80, shape=(81,), dtype=np.int8),
@@ -182,12 +182,12 @@ class UltimateTicTacToeEnv(gym.Env):
         # Draw pieces
         for i in range(9):
             for j in range(9):
-                if self.board.board[i, j] == 1:  # X
-                    # Draw X in red
+                if self.board.board[i, j] == 1:  # Player 1
+                    # Draw Player 1 in red
                     x, y = j * 30 + 15, i * 30 + 15
                     img[y-10:y+10, x-10:x+10] = [255, 0, 0]
-                elif self.board.board[i, j] == 2:  # O
-                    # Draw O in blue
+                elif self.board.board[i, j] == 2:  # Player 2
+                    # Draw Player 2 in blue
                     x, y = j * 30 + 15, i * 30 + 15
                     img[y-10:y+10, x-10:x+10] = [0, 0, 255]
         

@@ -143,22 +143,28 @@ def test_board_copy():
     print("Original board:")
     print(board1)
     print(f"Next player: {board1.next_player}")
+    print(f"Next block: {board1.next_block}")
     
     print("\nCopied board:")
     print(board2)
     print(f"Next player: {board2.next_player}")
+    print(f"Next block: {board2.next_block}")
     
-    # Make a move on the copy
-    board2.make_move(2, 2, 1, 1)
+    # Make a move on the copy (must be in the next_block which is (0,0))
+    board2.make_move(0, 0, 0, 0)  # Play in the top-left slot of block (0,0)
     
     print("\nAfter move on copy:")
     print("Original:")
     print(board1)
+    print(f"Next player: {board1.next_player}")
+    
     print("\nCopy:")
     print(board2)
+    print(f"Next player: {board2.next_player}")
     
     # Verify they're independent
     assert board1.next_player != board2.next_player, "Boards should be independent"
+    print("✅ Boards are independent!")
 
 
 if __name__ == "__main__":
@@ -177,4 +183,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\nTest failed with error: {e}")
         import traceback
-        traceback.print_exc() 
+        traceback.print_exc()

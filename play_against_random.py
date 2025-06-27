@@ -5,20 +5,7 @@ Interactive script to play Ultimate Tic-Tac-Toe against a random AI agent.
 
 import numpy as np
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
-
-
-class RandomAgent:
-    """Simple random agent."""
-    
-    def __init__(self, env):
-        self.env = env
-    
-    def get_action(self, valid_actions):
-        """Choose a random valid action."""
-        valid_action_indices = np.where(valid_actions == 1)[0]
-        if len(valid_action_indices) == 0:
-            return None
-        return np.random.choice(valid_action_indices)
+from ultimate_tic_tac_toe.agent import RandomAgent, HumanAgent
 
 
 def print_board_with_coordinates():
@@ -44,54 +31,6 @@ def print_board_with_coordinates():
             print("-" * 100)
 
 
-def get_human_move(env):
-    """Get a move from the human player."""
-    valid_actions = env.get_valid_actions()
-    valid_action_indices = np.where(valid_actions == 1)[0]
-    
-    if len(valid_action_indices) == 0:
-        return None
-    
-    print(f"\nValid moves: {len(valid_action_indices)}")
-    
-    while True:
-        try:
-            # Get input from user
-            move_input = input("Enter your move (block_row,block_col,slot_row,slot_col) or 'q' to quit: ").strip()
-            
-            if move_input.lower() == 'q':
-                return None
-            
-            # Parse the move
-            parts = move_input.split(',')
-            if len(parts) != 4:
-                print("Invalid format. Use: block_row,block_col,slot_row,slot_col")
-                continue
-            
-            block_row, block_col, slot_row, slot_col = map(int, parts)
-            
-            # Validate coordinates
-            if not (0 <= block_row <= 2 and 0 <= block_col <= 2 and 0 <= slot_row <= 2 and 0 <= slot_col <= 2):
-                print("Coordinates must be between 0 and 2")
-                continue
-            
-            # Convert to action
-            action = env._encode_action(block_row, block_col, slot_row, slot_col)
-            
-            # Check if action is valid
-            if valid_actions[action] == 0:
-                print("Invalid move! That position is not available.")
-                continue
-            
-            return action
-            
-        except ValueError:
-            print("Invalid input. Please enter four numbers separated by commas.")
-        except KeyboardInterrupt:
-            print("\nGame interrupted.")
-            return None
-
-
 def play_game():
     """Play a complete game against the random agent."""
     print("Ultimate Tic-Tac-Toe - Play Against Random AI")
@@ -101,7 +40,8 @@ def play_game():
     # Create environment
     env = UltimateTicTacToeEnv(initiator=1, render_mode="human")
     
-    # Create random agent
+    # Create agents
+    human_agent = HumanAgent(env)
     ai_agent = RandomAgent(env)
     
     # Reset environment
@@ -110,26 +50,27 @@ def play_game():
     print_board_with_coordinates()
     
     step_count = 0
+    terminated = False
     
-    while True:
+    while not terminated:
         step_count += 1
-        current_player = env.board.next_player
+        current_player = info['next_player']
         
         print(f"\n{'='*50}")
         print(f"Step {step_count}: Player {current_player} ({'You' if current_player == 1 else 'AI'})")
-        print(f"Next block: {env.board.next_block}")
+        print(f"Next block: {info['next_block']}")
         
         # Render current state
         env.render()
         
         if current_player == 1:  # Human player
-            action = get_human_move(env)
+            action = human_agent.get_action(observation, info)
             if action is None:
                 print("Game ended by user.")
                 break
         else:  # AI player
             print("AI is thinking...")
-            action = ai_agent.get_action(env.get_valid_actions())
+            action = ai_agent.get_action(observation, info)
             if action is None:
                 print("AI has no valid moves!")
                 break

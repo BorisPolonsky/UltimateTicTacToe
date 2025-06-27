@@ -7,20 +7,7 @@ This demonstrates a simple random agent and how to interact with the environment
 import numpy as np
 import gym
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
-
-
-class RandomAgent:
-    """Simple random agent for demonstration."""
-    
-    def __init__(self, env):
-        self.env = env
-    
-    def get_action(self, observation, valid_actions):
-        """Choose a random valid action."""
-        valid_action_indices = np.where(valid_actions == 1)[0]
-        if len(valid_action_indices) == 0:
-            return None
-        return np.random.choice(valid_action_indices)
+from ultimate_tic_tac_toe.agent import RandomAgent
 
 
 def play_game(env, agent1, agent2, render=False):
@@ -34,11 +21,8 @@ def play_game(env, agent1, agent2, render=False):
         # Determine current agent based on info from environment
         current_agent = agent1 if info['next_player'] == env.initiator else agent2
         
-        # Get valid actions
-        valid_actions = env.get_valid_actions()
-        
         # Get action from current agent
-        action = current_agent.get_action(observation, valid_actions)
+        action = current_agent.get_action(observation, info)
         
         if action is None:
             # Check if the game should be terminated based on info
@@ -51,7 +35,7 @@ def play_game(env, agent1, agent2, render=False):
                     f"Next block: {info['next_block']}\n"
                     f"Game over: {info['game_over']}\n"
                     f"Winner: {info['winner']}\n"
-                    f"Valid moves count: {np.sum(valid_actions)}\n"
+                    f"Valid moves count: {np.sum(env.get_valid_actions())}\n"
                     f"Board state:\n{env.board}"
                 )
                 raise RuntimeError(error_msg)
@@ -72,11 +56,12 @@ def play_game(env, agent1, agent2, render=False):
             env.render()
             print()
         
-    if render:
-        if info['winner'] == 0:
-            print("Game ended in a draw!")
-        else:
-            print(f"Player {info['winner']} wins!")
+        if terminated:
+            if render:
+                if info['winner'] == 0:
+                    print("Game ended in a draw!")
+                else:
+                    print(f"Player {info['winner']} wins!")
     
     return total_reward, step_count, info['winner']
 

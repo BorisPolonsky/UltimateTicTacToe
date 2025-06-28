@@ -14,7 +14,7 @@ def test_board_class():
     print("=== Testing Board Class ===")
     
     # Create a new board
-    board = Board(initiator=1, sovereignty_upon_draw="none")
+    board = Board(sovereignty_upon_draw="none")
     print("Initial board:")
     print(board)
     print(f"Next player: {board.next_player}")
@@ -56,7 +56,7 @@ def test_gym_environment():
     print("\n=== Testing Gym Environment ===")
     
     # Create environment
-    env = UltimateTicTacToeEnv(initiator=1, render_mode="human")
+    env = UltimateTicTacToeEnv(render_mode="human")
     
     # Reset environment
     observation, info = env.reset()
@@ -103,17 +103,18 @@ def test_gym_environment():
 
 
 def test_action_encoding():
-    """Test action encoding/decoding."""
-    print("\n=== Testing Action Encoding/Decoding ===")
+    """Test action encoding and decoding."""
+    print("=== Testing Action Encoding/Decoding ===")
     
     env = UltimateTicTacToeEnv()
     
-    # Test some action encodings
+    # Test some moves with the new encoding
+    # Action index = row * 9 + col
     test_moves = [
-        (0, 0, 0, 0),  # Top-left block, top-left slot
-        (0, 0, 1, 1),  # Top-left block, center slot
-        (1, 1, 2, 2),  # Center block, bottom-right slot
-        (2, 2, 0, 0),  # Bottom-right block, top-left slot
+        (0, 0, 0, 0),  # block (0,0), slot (0,0) -> board (0,0) -> action 0
+        (0, 0, 1, 1),  # block (0,0), slot (1,1) -> board (1,1) -> action 10
+        (1, 1, 2, 2),  # block (1,1), slot (2,2) -> board (5,5) -> action 50
+        (2, 2, 0, 0),  # block (2,2), slot (0,0) -> board (6,6) -> action 60
     ]
     
     for move in test_moves:
@@ -122,49 +123,64 @@ def test_action_encoding():
         decoded = env._decode_action(action)
         
         print(f"Move {move} -> Action {action} -> Decoded {decoded}")
-        assert move == decoded, f"Encoding/decoding failed for {move}"
+        assert decoded == move, f"Encoding/decoding failed for {move}"
     
-    env.close()
+    print("Action encoding/decoding test passed!")
+
+
+def test_basic_game():
+    """Test basic game functionality."""
+    board = Board(sovereignty_upon_draw="none")
+    
+    # Test initial state
+    assert board.next_player == 1
+    assert not board.game_over
+    assert board.winner is None
+    assert board.next_block is None
+    
+    # Test first move
+    assert board.is_valid_move(0, 0, 0, 0)
+    game_over = board.make_move(0, 0, 0, 0)
+    assert not game_over
+    assert board.next_player == 2
+    assert board.next_block == (0, 0)
+    
+    print("Basic game test passed!")
 
 
 def test_board_copy():
     """Test board copying functionality."""
-    print("\n=== Testing Board Copy ===")
-    
-    board1 = Board(initiator=1)
+    board1 = Board()
     
     # Make some moves
-    board1.make_move(0, 0, 1, 1)
-    board1.make_move(1, 1, 0, 0)
+    board1.make_move(0, 0, 0, 0)
+    board1.make_move(0, 0, 0, 1)
     
     # Copy the board
     board2 = board1.copy()
     
-    print("Original board:")
-    print(board1)
-    print(f"Next player: {board1.next_player}")
-    print(f"Next block: {board1.next_block}")
+    # Verify they're identical
+    assert np.array_equal(board1.board, board2.board)
+    assert np.array_equal(board1.block_status, board2.block_status)
+    assert board1.next_player == board2.next_player
+    assert board1.next_block == board2.next_block
+    assert board1.game_over == board2.game_over
+    assert board1.winner == board2.winner
     
-    print("\nCopied board:")
-    print(board2)
-    print(f"Next player: {board2.next_player}")
-    print(f"Next block: {board2.next_block}")
+    # Verify they're independent - make a valid move on the copy
+    # The next_block should be (0,0) after the previous moves
+    if board2.next_block == (0, 0):
+        board2.make_move(0, 0, 0, 2)  # This should be valid
+        assert not np.array_equal(board1.board, board2.board)
+    else:
+        # If next_block is None, we can play anywhere
+        valid_moves = board2.get_valid_moves()
+        if valid_moves:
+            move = valid_moves[0]
+            board2.make_move(*move)
+            assert not np.array_equal(board1.board, board2.board)
     
-    # Make a move on the copy (must be in the next_block which is (0,0))
-    board2.make_move(0, 0, 0, 0)  # Play in the top-left slot of block (0,0)
-    
-    print("\nAfter move on copy:")
-    print("Original:")
-    print(board1)
-    print(f"Next player: {board1.next_player}")
-    
-    print("\nCopy:")
-    print(board2)
-    print(f"Next player: {board2.next_player}")
-    
-    # Verify they're independent
-    assert board1.next_player != board2.next_player, "Boards should be independent"
-    print("✅ Boards are independent!")
+    print("Board copy test passed!")
 
 
 if __name__ == "__main__":
@@ -175,6 +191,7 @@ if __name__ == "__main__":
         test_board_class()
         test_gym_environment()
         test_action_encoding()
+        test_basic_game()
         test_board_copy()
         
         print("\n" + "=" * 50)

@@ -16,25 +16,23 @@ class UltimateTicTacToeEnv(gym.Env):
     metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 4}
     
     def __init__(self, 
-                 initiator: int = 1, 
                  sovereignty_upon_draw: str = "none",
                  render_mode: Optional[str] = None):
         """
         Initialize the environment.
         
         Args:
-            initiator: 1 for player 1 (initiator), 2 for player 2
             sovereignty_upon_draw: "none" or "both" for rule variants
             render_mode: "human" or "rgb_array"
         """
         super().__init__()
         
-        self.initiator = initiator
         self.sovereignty_upon_draw = sovereignty_upon_draw
         self.render_mode = render_mode
         
-        # Action space: 81 possible moves (9 blocks × 9 slots)
-        # Actions are encoded as: block_row * 27 + block_col * 9 + slot_row * 3 + slot_col
+        # Action space: 81 possible moves (9x9 board)
+        # Actions are encoded as: action_index = row * 9 + col
+        # one_hot(action_index).reshape(9,9) is a mask for the move
         self.action_space = spaces.Discrete(81)
         
         # Observation space: 9x9 board (0=empty, 1=player1, 2=player2)
@@ -59,8 +57,7 @@ class UltimateTicTacToeEnv(gym.Env):
         """Reset the environment to initial state."""
         super().reset(seed=seed)
         
-        self.board = Board(initiator=self.initiator, 
-                          sovereignty_upon_draw=self.sovereignty_upon_draw)
+        self.board = Board(sovereignty_upon_draw=self.sovereignty_upon_draw)
         
         observation = self._get_observation()
         info = self._get_info()
@@ -111,16 +108,47 @@ class UltimateTicTacToeEnv(gym.Env):
         return observation, reward, terminated, truncated, info
     
     def _decode_action(self, action: int) -> Tuple[int, int, int, int]:
-        """Decode action integer to (block_row, block_col, slot_row, slot_col)."""
-        block_row = action // 27
-        block_col = (action % 27) // 9
-        slot_row = (action % 9) // 3
-        slot_col = action % 3
+        """Decode action integer to (block_row, block_col, slot_row, slot_col).
+        
+        Action index is mapped as: action_index = row * 9 + col, where (row, col) is the 9x9 board position.
+        
+        Relationship between coordinates:
+        - (row, col): Direct position on the 9x9 board (0-8, 0-8)
+        - (block_row, block_col): Which 3x3 block (0-2, 0-2)
+        - (slot_row, slot_col): Position within that 3x3 block (0-2, 0-2)
+        
+        Conversion: row = block_row * 3 + slot_row, col = block_col * 3 + slot_col
+        """
+        # Convert action index to board position (row, col)
+        row = action // 9
+        col = action % 9
+        
+        # Convert board position to block and slot coordinates
+        block_row = row // 3
+        block_col = col // 3
+        slot_row = row % 3
+        slot_col = col % 3
+        
         return block_row, block_col, slot_row, slot_col
     
     def _encode_action(self, block_row: int, block_col: int, slot_row: int, slot_col: int) -> int:
-        """Encode (block_row, block_col, slot_row, slot_col) to action integer."""
-        return block_row * 27 + block_col * 9 + slot_row * 3 + slot_col
+        """Encode (block_row, block_col, slot_row, slot_col) to action integer.
+        
+        Returns action_index = row * 9 + col, where (row, col) is the 9x9 board position.
+        
+        Relationship between coordinates:
+        - (block_row, block_col): Which 3x3 block (0-2, 0-2)
+        - (slot_row, slot_col): Position within that 3x3 block (0-2, 0-2)
+        - (row, col): Direct position on the 9x9 board (0-8, 0-8)
+        
+        Conversion: row = block_row * 3 + slot_row, col = block_col * 3 + slot_col
+        """
+        # Convert block and slot coordinates to board position
+        row = block_row * 3 + slot_row
+        col = block_col * 3 + slot_col
+        
+        # Convert board position to action index
+        return row * 9 + col
     
     def _get_observation(self) -> np.ndarray:
         """Get the current board observation."""
@@ -153,11 +181,11 @@ class UltimateTicTacToeEnv(gym.Env):
         if self.board.winner == 0:
             # Draw
             return 0.0
-        elif self.board.winner == self.initiator:
-            # Win
+        elif self.board.winner == 1:
+            # Player 1 wins
             return 1.0
         else:
-            # Loss
+            # Player 2 wins
             return -1.0
     
     def render(self):
@@ -203,8 +231,7 @@ class UltimateTicTacToeEnv(gym.Env):
     
     def set_state(self, state: Dict[str, Any]):
         """Set the state of the environment."""
-        self.board = Board(initiator=self.initiator, 
-                          sovereignty_upon_draw=self.sovereignty_upon_draw)
+        self.board = Board(sovereignty_upon_draw=self.sovereignty_upon_draw)
         self.board.board = state['board'].copy()
         self.board.block_status = state['block_status'].copy()
         self.board.next_player = state['next_player']

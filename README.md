@@ -11,7 +11,7 @@ This project has been refactored to provide a modern, efficient implementation s
 
 1. **Board Class (`ultimate_tic_tac_toe/board.py`)**:
    - Represents the board as a 9x9 numpy array
-   - 0 = empty, 1 = initiator (X), 2 = opponent (O)
+   - 0 = unoccupied, 1 = player 1, 2 = player 2, 3 = draw
    - Efficient move validation and game state tracking
    - Support for both rule variants (normal and bizarre)
 
@@ -35,12 +35,12 @@ from ultimate_tic_tac_toe.board import Board
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
 
 # Use the Board class directly
-board = Board(initiator=1)
+board = Board()
 game_over = board.make_move(0, 0, 1, 1)  # block_row, block_col, slot_row, slot_col
 print(board)
 
 # Use as a Gym environment
-env = UltimateTicTacToeEnv(initiator=1)
+env = UltimateTicTacToeEnv()
 observation, info = env.reset()
 action = env.action_space.sample()  # Random action
 observation, reward, terminated, truncated, info = env.step(action)

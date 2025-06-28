@@ -38,7 +38,7 @@ def play_game():
     print("You are Player 1 (X), AI is Player 2 (O)")
     
     # Create environment
-    env = UltimateTicTacToeEnv(initiator=1, render_mode="human")
+    env = UltimateTicTacToeEnv(render_mode="human")
     
     # Create agents
     human_agent = HumanAgent(env)

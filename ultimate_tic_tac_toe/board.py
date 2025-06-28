@@ -6,25 +6,24 @@ import random
 class Board:
     """
     Ultimate Tic-Tac-Toe board represented as a 9x9 numpy array.
-    0 = empty, 1 = initiator (X), 2 = opponent (O)
+    0 = unoccupied, 1 = player 1, 2 = player 2, 3 = draw
     """
     
-    def __init__(self, initiator: int = 1, sovereignty_upon_draw: str = "none"):
+    def __init__(self, sovereignty_upon_draw: str = "none"):
         """
         Initialize the board.
         
         Args:
-            initiator: 1 for X (initiator), 2 for O (opponent)
             sovereignty_upon_draw: "none" or "both" for rule variants
         """
         self.board = np.zeros((9, 9), dtype=np.int8)
-        self.next_player = initiator
+        self.next_player = 1  # Player 1 always starts
         self.next_block = None  # (row, col) of the next block to play in
         self.game_over = False
         self.winner = None
         self.sovereignty_upon_draw = sovereignty_upon_draw
         
-        # Track completed blocks (0=empty, 1=X, 2=O, 3=draw)
+        # Track completed blocks (0=empty, 1=player1, 2=player2, 3=draw)
         self.block_status = np.zeros((3, 3), dtype=np.int8)
         self.num_filled_blocks = 0
     
@@ -111,7 +110,7 @@ class Board:
         return False
     
     def _check_block_winner(self, block: np.ndarray) -> int:
-        """Check if a 3x3 block has a winner. Returns 0 (no winner), 1 (X), 2 (O), or 3 (draw)."""
+        """Check if a 3x3 block has a winner. Returns 0 (no winner), 1 (player1), 2 (player2), or 3 (draw)."""
         # Check rows
         for row in range(3):
             if block[row, 0] != 0 and block[row, 0] == block[row, 1] == block[row, 2]:
@@ -210,7 +209,7 @@ class Board:
     
     def copy(self) -> 'Board':
         """Create a deep copy of the board."""
-        new_board = Board(initiator=self.next_player, sovereignty_upon_draw=self.sovereignty_upon_draw)
+        new_board = Board(sovereignty_upon_draw=self.sovereignty_upon_draw)
         new_board.board = self.board.copy()
         new_board.block_status = self.block_status.copy()
         new_board.next_player = self.next_player

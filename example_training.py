@@ -19,7 +19,7 @@ def play_game(env, agent1, agent2, render=False):
     
     while not terminated:
         # Determine current agent based on info from environment
-        current_agent = agent1 if info['next_player'] == env.initiator else agent2
+        current_agent = agent1 if info['next_player'] == 1 else agent2
         
         # Get action from current agent
         action = current_agent.get_action(observation, info)
@@ -66,47 +66,34 @@ def play_game(env, agent1, agent2, render=False):
     return total_reward, step_count, info['winner']
 
 
-def train_random_agents(num_episodes=1000):
-    """Train random agents and collect statistics."""
-    print("Training Random Agents...")
+def train_agents(episodes=1000):
+    """Train two agents against each other."""
+    print("Training agents...")
     
-    # Create environment
-    env = UltimateTicTacToeEnv(initiator=1)
-    
-    # Create agents
-    agent1 = RandomAgent(env)
-    agent2 = RandomAgent(env)
-    
-    # Statistics
-    wins_player1 = 0
-    wins_player2 = 0
-    draws = 0
-    total_steps = 0
-    
-    for episode in range(num_episodes):
+    # Training loop
+    for episode in range(episodes):
+        env = UltimateTicTacToeEnv()
+        agent1 = RandomAgent(env)
+        agent2 = RandomAgent(env)
+        observation, info = env.reset()
+        
+        while not info['game_over']:
+            # Determine current agent based on next_player
+            current_agent = agent1 if info['next_player'] == 1 else agent2
+            
+            # Get action from current agent
+            action = current_agent.get_action(observation, info)
+            
+            # Take step
+            observation, reward, terminated, truncated, info = env.step(action)
+            
+            if terminated:
+                break
+        
         if episode % 100 == 0:
-            print(f"Episode {episode}/{num_episodes}")
-        
-        # Play game
-        reward, steps, winner = play_game(env, agent1, agent2, render=False)
-        
-        # Update statistics
-        total_steps += steps
-        if winner == 1:
-            wins_player1 += 1
-        elif winner == 2:
-            wins_player2 += 1
-        else:
-            draws += 1
+            print(f"Episode {episode} completed")
     
-    # Print results
-    print(f"\nTraining Results ({num_episodes} episodes):")
-    print(f"Player 1 wins: {wins_player1} ({wins_player1/num_episodes*100:.1f}%)")
-    print(f"Player 2 wins: {wins_player2} ({wins_player2/num_episodes*100:.1f}%)")
-    print(f"Draws: {draws} ({draws/num_episodes*100:.1f}%)")
-    print(f"Average steps per game: {total_steps/num_episodes:.1f}")
-    
-    env.close()
+    print("Training completed!")
 
 
 def demonstrate_environment():
@@ -114,7 +101,7 @@ def demonstrate_environment():
     print("Demonstrating Environment...")
     
     # Create environment
-    env = UltimateTicTacToeEnv(initiator=1, render_mode="human")
+    env = UltimateTicTacToeEnv(render_mode="human")
     
     # Create agents
     agent1 = RandomAgent(env)
@@ -156,6 +143,46 @@ def test_environment_registration():
         print(f"❌ Environment registration failed: {e}")
 
 
+def test_trained_agents():
+    """Test the trained agents."""
+    print("Testing trained agents...")
+    
+    # Create environment
+    env = UltimateTicTacToeEnv(render_mode="human")
+    
+    # Create agents (in a real scenario, these would be trained agents)
+    agent1 = RandomAgent(env)
+    agent2 = RandomAgent(env)
+    
+    # Play a game
+    observation, info = env.reset()
+    env.render()
+    
+    while not info['game_over']:
+        # Determine current agent
+        current_agent = agent1 if info['next_player'] == 1 else agent2
+        
+        # Get action
+        action = current_agent.get_action(observation, info)
+        
+        # Take step
+        observation, reward, terminated, truncated, info = env.step(action)
+        env.render()
+        
+        if terminated:
+            break
+    
+    # Print result
+    if info['winner'] == 0:
+        print("Game ended in a draw!")
+    elif info['winner'] == 1:
+        print("Player 1 wins!")
+    else:
+        print("Player 2 wins!")
+    
+    env.close()
+
+
 if __name__ == "__main__":
     print("Ultimate Tic-Tac-Toe - Training Example")
     print("=" * 50)
@@ -170,8 +197,13 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 50)
     
-    # Train random agents
-    train_random_agents(num_episodes=100)
+    # Train agents
+    train_agents(episodes=100)
+    
+    print("\n" + "=" * 50)
+    
+    # Test trained agents
+    test_trained_agents()
     
     print("\n" + "=" * 50)
     print("Example completed! 🎉") 

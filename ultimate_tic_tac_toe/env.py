@@ -45,7 +45,7 @@ class UltimateTicTacToeEnv(gym.Env):
             'block_status': spaces.Box(low=0, high=3, shape=(3, 3), dtype=np.int8),  # 0=empty, 1=player1, 2=player2, 3=draw
             'next_player': spaces.Discrete(3),  # 0=game_over, 1=player1, 2=player2
             'next_block': spaces.Tuple((spaces.Discrete(3), spaces.Discrete(3))),
-            'valid_moves': spaces.Box(low=0, high=80, shape=(81,), dtype=np.int8),
+            'valid_moves': spaces.Box(low=0, high=1, shape=(81,), dtype=np.int8),
             'game_over': spaces.Discrete(2),
             'winner': spaces.Discrete(3)  # 0=no_winner, 1=player1, 2=player2
         })

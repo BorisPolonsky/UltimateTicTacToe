@@ -175,8 +175,8 @@ class UltimateTicTacToeEnv(gym.Env):
     def _calculate_reward(self) -> float:
         """Calculate reward for the current state."""
         if not self.board.game_over:
-            # Small reward for making a valid move
-            return 0.1
+            # No reward for non-terminal states
+            return 0.0
         
         if self.board.winner == 0:
             # Draw

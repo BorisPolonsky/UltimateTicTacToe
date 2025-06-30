@@ -18,7 +18,7 @@ from .abstract_agent import Agent
 from .abstract_trainer import TrainingAlgorithm
 
 
-Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
+Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done', 'valid_actions', 'next_valid_actions'])
 
 
 class MultiPlaneEncoder:
@@ -177,48 +177,78 @@ class MultiPlaneEncoder:
 class DQNNetwork(nn.Module):
     """Deep Q-Network for Ultimate Tic-Tac-Toe."""
     
-    def __init__(self, input_shape: Tuple[int, ...], num_actions: int = 81, hidden_size: int = 256):
+    def __init__(self, input_shape: Tuple[int, ...], num_actions: int = 81, 
+                 hidden_size: int = 256, conv_channels: List[int] = None, 
+                 fc_layers: List[int] = None):
         super(DQNNetwork, self).__init__()
         
         self.input_shape = input_shape
         self.num_actions = num_actions
         
+        # Default network architecture
+        if conv_channels is None:
+            conv_channels = [64, 128, 256]  # Default conv layers
+        if fc_layers is None:
+            fc_layers = [hidden_size, hidden_size]  # Default FC layers
+        
+        self.conv_channels = conv_channels
+        self.fc_layers = fc_layers
+        
         # Determine if input is 3D (multiplane) or 1D (simple)
         if len(input_shape) == 3:  # Multiplane encoder: (3, 3, 31)
-            self._build_conv_network(hidden_size)
+            self._build_conv_network()
         else:  # Simple encoder: (81,)
-            self._build_fc_network(hidden_size)
+            self._build_fc_network()
     
-    def _build_conv_network(self, hidden_size: int):
+    def _build_conv_network(self):
         """Build convolutional network for multiplane input."""
         # Convolutional layers
-        self.conv1 = nn.Conv2d(self.input_shape[2], 64, kernel_size=2, padding=1)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=2, padding=1)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=2, padding=1)
+        conv_layers = []
+        bn_layers = []
+        
+        in_channels = self.input_shape[2]  # Start with input channels (31)
+        
+        for i, out_channels in enumerate(self.conv_channels):
+            conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=2, padding=1))
+            bn_layers.append(nn.BatchNorm2d(out_channels))
+            in_channels = out_channels
+        
+        self.conv_layers = nn.ModuleList(conv_layers)
+        self.bn_layers = nn.ModuleList(bn_layers)
         
         # Calculate flattened size after conv layers
-        # Input: 3x3, after conv1 (2x2, padding=1): 4x4
-        # After conv2 (2x2, padding=1): 5x5
-        # After conv3 (2x2, padding=1): 6x6
-        conv_output_size = 256 * 6 * 6  # After 3 conv layers on 3x3 input
+        # Input: 3x3, after each conv (2x2, padding=1): size increases by 1
+        # So after N conv layers: (3 + N) x (3 + N)
+        conv_output_size = self.conv_channels[-1] * (3 + len(self.conv_channels)) * (3 + len(self.conv_channels))
         
         # Fully connected layers
-        self.fc1 = nn.Linear(conv_output_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, self.num_actions)
+        fc_layers = []
+        in_size = conv_output_size
         
-        # Batch normalization
-        self.bn1 = nn.BatchNorm2d(64)
-        self.bn2 = nn.BatchNorm2d(128)
-        self.bn3 = nn.BatchNorm2d(256)
+        for fc_size in self.fc_layers:
+            fc_layers.append(nn.Linear(in_size, fc_size))
+            in_size = fc_size
+        
+        # Output layer
+        fc_layers.append(nn.Linear(in_size, self.num_actions))
+        
+        self.fc_layers = nn.ModuleList(fc_layers)
     
-    def _build_fc_network(self, hidden_size: int):
+    def _build_fc_network(self):
         """Build fully connected network for simple input."""
         input_size = self.input_shape[0]
         
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, self.num_actions)
+        fc_layers = []
+        in_size = input_size
+        
+        for fc_size in self.fc_layers:
+            fc_layers.append(nn.Linear(in_size, fc_size))
+            in_size = fc_size
+        
+        # Output layer
+        fc_layers.append(nn.Linear(in_size, self.num_actions))
+        
+        self.fc_layers = nn.ModuleList(fc_layers)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the network."""
@@ -227,19 +257,20 @@ class DQNNetwork(nn.Module):
             x = x.permute(0, 3, 1, 2)
             
             # Convolutional layers
-            x = F.relu(self.bn1(self.conv1(x)))
-            x = F.relu(self.bn2(self.conv2(x)))
-            x = F.relu(self.bn3(self.conv3(x)))
+            for conv, bn in zip(self.conv_layers, self.bn_layers):
+                x = F.relu(bn(conv(x)))
             
             # Flatten
             x = x.reshape(x.size(0), -1)
         else:  # Simple input
             x = x.reshape(x.size(0), -1)
         
-        # Fully connected layers
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        # Fully connected layers (except the last one)
+        for i in range(len(self.fc_layers) - 1):
+            x = F.relu(self.fc_layers[i](x))
+        
+        # Output layer (no activation)
+        x = self.fc_layers[-1](x)
         
         return x
 
@@ -250,12 +281,15 @@ class DQNAgent(Agent):
     def __init__(self, 
                  env,
                  encoder: MultiPlaneEncoder,
-                 learning_rate: float = 1e-5,
+                 learning_rate: float = 5e-6,
                  gamma: float = 0.99,
                  epsilon: float = 1.0,
                  epsilon_min: float = 0.1,
                  epsilon_decay: float = 0.9995,
-                 device: str = 'cpu'):
+                 device: str = 'cpu',
+                 hidden_size: int = 256,
+                 conv_channels: List[int] = None,
+                 fc_layers: List[int] = None):
         """
         Initialize DQN Agent.
         
@@ -268,6 +302,9 @@ class DQNAgent(Agent):
             epsilon_min: Minimum exploration rate
             epsilon_decay: Epsilon decay rate
             device: Device to run on ('cpu' or 'cuda')
+            hidden_size: Size of hidden layers (for backward compatibility)
+            conv_channels: List of channel sizes for conv layers [64, 128, 256]
+            fc_layers: List of sizes for fully connected layers [256, 256]
         """
         super().__init__(env)
         
@@ -281,17 +318,34 @@ class DQNAgent(Agent):
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         
+        # Network architecture parameters
+        self.hidden_size = hidden_size
+        self.conv_channels = conv_channels
+        self.fc_layers = fc_layers
+        
         # Networks
         input_shape = encoder.get_input_shape()
-        self.q_network = DQNNetwork(input_shape).to(self.device)
-        self.target_network = DQNNetwork(input_shape).to(self.device)
+        self.q_network = DQNNetwork(
+            input_shape, 
+            hidden_size=hidden_size,
+            conv_channels=conv_channels,
+            fc_layers=fc_layers
+        ).to(self.device)
+        self.target_network = DQNNetwork(
+            input_shape,
+            hidden_size=hidden_size,
+            conv_channels=conv_channels,
+            fc_layers=fc_layers
+        ).to(self.device)
         self.target_network.load_state_dict(self.q_network.state_dict())
         
         # Optimizer
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=learning_rate)
         
-        # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1000, gamma=0.9)
+        # Learning rate scheduler - reduce LR when loss plateaus
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=100, verbose=True
+        )
         
         # Training state
         self.training_enabled = True
@@ -372,7 +426,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
     def __init__(self, 
                  memory_size: int = 50000,
                  batch_size: int = 32,
-                 target_update_freq: int = 1000,
+                 target_update_freq: int = 100,  # More frequent updates
                  gamma: float = 0.99,
                  epsilon_decay: float = 0.9995,
                  epsilon_min: float = 0.1):
@@ -382,7 +436,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         Args:
             memory_size: Size of replay memory
             batch_size: Batch size for training
-            target_update_freq: Frequency of target network updates
+            target_update_freq: Frequency of target network updates (lower = more frequent)
             gamma: Discount factor
             epsilon_decay: Epsilon decay rate
             epsilon_min: Minimum epsilon value
@@ -394,6 +448,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
         self.step_count = 0
+        self.loss_history = []  # Track loss for monitoring
     
     def train_episode(self, env: UltimateTicTacToeEnv, agent: Agent, 
                      opponent: Agent, encoder: MultiPlaneEncoder) -> Dict[str, Any]:
@@ -423,7 +478,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
             
             # Store experience if this is the training agent
             if current_agent == agent:
-                self.memory.append(Experience(current_state, action, reward, next_state, terminated))
+                self.memory.append(Experience(current_state, action, reward, next_state, terminated, info['valid_moves'], next_info['valid_moves']))
                 
                 # Train the agent
                 loss = self._train_step(agent)
@@ -444,6 +499,9 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
             'step_count': step_count,
             'winner': info['winner'],
             'avg_loss': np.mean(losses) if losses else 0.0,
+            'min_loss': np.min(losses) if losses else 0.0,
+            'max_loss': np.max(losses) if losses else 0.0,
+            'loss_std': np.std(losses) if losses else 0.0,
             'epsilon': getattr(agent, 'epsilon', 0.0)
         }
     
@@ -456,18 +514,36 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         batch = random.sample(self.memory, self.batch_size)
         
         # Prepare batch tensors
+        # [BATCH_SIZE, 3, 3, num_planes]
         states = torch.FloatTensor(np.array([exp.state for exp in batch])).to(agent.device)
+        # [BATCH_SIZE]
         actions = torch.LongTensor([exp.action for exp in batch]).to(agent.device)
+        # [BATCH_SIZE]
         rewards = torch.FloatTensor([exp.reward for exp in batch]).to(agent.device)
+        # [BATCH_SIZE, 3, 3, num_planes]
         next_states = torch.FloatTensor(np.array([exp.next_state for exp in batch])).to(agent.device)
+        # [BATCH_SIZE]
         dones = torch.BoolTensor([exp.done for exp in batch]).to(agent.device)
+        # [BATCH_SIZE, 81] - valid actions mask
+        valid_actions = torch.FloatTensor(np.array([exp.valid_actions for exp in batch])).to(agent.device)
+        # [BATCH_SIZE, 81] - next valid actions mask
+        next_valid_actions = torch.FloatTensor(np.array([exp.next_valid_actions for exp in batch])).to(agent.device)
         
         # Current Q-values
+        # [BATCH_SIZE, 1]
         current_q_values = agent.q_network(states).gather(1, actions.unsqueeze(1))
         
-        # Next Q-values (from target network)
+        # Next Q-values (from target network) with action masking
         with torch.no_grad():
-            next_q_values = agent.target_network(next_states).max(1)[0]
+            next_q_values_raw = agent.target_network(next_states)  # [BATCH_SIZE, 81]
+            
+            # Mask invalid actions with large negative values
+            masked_q_values = next_q_values_raw.clone()
+            masked_q_values[next_valid_actions == 0] = -1e6
+            
+            # Take maximum over valid actions only
+            next_q_values = masked_q_values.max(1)[0]  # [BATCH_SIZE]
+            
             target_q_values = rewards + (self.gamma * next_q_values * ~dones)
         
         # Compute loss
@@ -483,12 +559,15 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         agent.optimizer.step()
         
         # Update learning rate
-        agent.scheduler.step()
+        agent.scheduler.step(loss)
         
         # Update target network
         self.step_count += 1
         if self.step_count % self.target_update_freq == 0:
             agent.target_network.load_state_dict(agent.q_network.state_dict())
+        
+        # Track loss for monitoring
+        self.loss_history.append(loss.item())
         
         return loss.item()
 
@@ -669,8 +748,11 @@ class DQNTrainer:
               f"Reward: {metrics['total_reward']:6.2f} | "
               f"Steps: {metrics['step_count']:3d} | "
               f"Winner: {metrics['winner']} | "
-              f"Loss: {metrics['avg_loss']:6.4f} | "
-              f"Epsilon: {metrics['epsilon']:5.3f}")
+              f"Loss: {metrics['avg_loss']:.4f} | "
+              f"Epsilon: {metrics['epsilon']:.3f}")
+        if metrics['loss_std'] > 0:
+            print(f"           Loss stats: min={metrics['min_loss']:.4f}, "
+                  f"max={metrics['max_loss']:.4f}, std={metrics['loss_std']:.4f}")
     
     def _log_evaluation(self, episode: int, metrics: Dict[str, Any]):
         """Log evaluation results."""

@@ -32,8 +32,13 @@ class TrainingConfig:
         # Encoder settings
         self.encoder_type = kwargs.get('encoder_type', 'multiplane')
         
+        # Network architecture settings
+        self.hidden_size = kwargs.get('hidden_size', 256)
+        self.conv_channels = kwargs.get('conv_channels', [64, 128, 256])
+        self.fc_layers = kwargs.get('fc_layers', [256, 256])
+        
         # DQN hyperparameters
-        self.learning_rate = kwargs.get('learning_rate', 1e-5)
+        self.learning_rate = kwargs.get('learning_rate', 5e-6)
         self.gamma = kwargs.get('gamma', 0.99)
         self.epsilon = kwargs.get('epsilon', 1.0)
         self.epsilon_min = kwargs.get('epsilon_min', 0.1)
@@ -60,6 +65,9 @@ class TrainingConfig:
         return {
             'sovereignty_upon_draw': self.sovereignty_upon_draw,
             'encoder_type': self.encoder_type,
+            'hidden_size': self.hidden_size,
+            'conv_channels': self.conv_channels,
+            'fc_layers': self.fc_layers,
             'learning_rate': self.learning_rate,
             'gamma': self.gamma,
             'epsilon': self.epsilon,
@@ -221,7 +229,10 @@ def create_training_components(config: TrainingConfig):
         epsilon=config.epsilon,
         epsilon_min=config.epsilon_min,
         epsilon_decay=config.epsilon_decay,
-        device=device
+        device=device,
+        hidden_size=config.hidden_size,
+        conv_channels=config.conv_channels,
+        fc_layers=config.fc_layers
     )
     
     opponent = RandomAgent(env)
@@ -340,13 +351,13 @@ def main():
     parser = argparse.ArgumentParser(description='Train DQN agent for Ultimate Tic-Tac-Toe')
     
     # Training parameters
-    parser.add_argument('--episodes', type=int, default=10000, help='Number of training episodes')
-    parser.add_argument('--learning-rate', type=float, default=1e-5, help='Learning rate')
+    parser.add_argument('--episodes', type=int, default=2000, help='Number of training episodes')
+    parser.add_argument('--learning-rate', type=float, default=5e-6, help='Learning rate')
     parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
     parser.add_argument('--epsilon-min', type=float, default=0.1, help='Minimum exploration rate')
     parser.add_argument('--epsilon-decay', type=float, default=0.9995, help='Epsilon decay rate')
-    parser.add_argument('--batch-size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--batch-size', type=int, default=128, help='Batch size for training')
     parser.add_argument('--memory-size', type=int, default=50000, help='Replay memory size')
     
     # Model parameters
@@ -354,6 +365,12 @@ def main():
                        choices=['multiplane', 'simple'], help='State encoder type')
     parser.add_argument('--device', type=str, default='auto', 
                        choices=['auto', 'cpu', 'cuda'], help='Device to use')
+    parser.add_argument('--hidden-size', type=int, default=256, 
+                       help='Size of hidden layers')
+    parser.add_argument('--conv-channels', type=str, default='64,128,256',
+                       help='Comma-separated list of conv layer channel sizes')
+    parser.add_argument('--fc-layers', type=str, default='256,256',
+                       help='Comma-separated list of fully connected layer sizes')
     
     # Training settings
     parser.add_argument('--eval-interval', type=int, default=100, help='Evaluation interval')
@@ -366,6 +383,10 @@ def main():
                        choices=['none', 'both'], help='Sovereignty upon draw rule')
     
     args = parser.parse_args()
+    
+    # Parse network architecture parameters
+    conv_channels = [int(x.strip()) for x in args.conv_channels.split(',')]
+    fc_layers = [int(x.strip()) for x in args.fc_layers.split(',')]
     
     # Create configuration
     config = TrainingConfig(
@@ -383,7 +404,10 @@ def main():
         save_interval=args.save_interval,
         log_interval=args.log_interval,
         model_save_path=args.model_path,
-        sovereignty_upon_draw=args.sovereignty
+        sovereignty_upon_draw=args.sovereignty,
+        hidden_size=args.hidden_size,
+        conv_channels=conv_channels,
+        fc_layers=fc_layers
     )
     
     # Start training

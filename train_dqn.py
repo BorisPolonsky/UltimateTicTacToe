@@ -19,9 +19,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
 from ultimate_tic_tac_toe.agent_impl import RandomAgent
-from ultimate_tic_tac_toe.dqn_agent import DQNAgent
+from ultimate_tic_tac_toe.dqn_trainer import DQNAgent, DQNTrainer, DQNTrainingAlgorithm
 from ultimate_tic_tac_toe.encoder_impl import EncoderFactory
-from ultimate_tic_tac_toe.trainer_impl import Trainer, DQNTrainingAlgorithm
 
 
 class TrainingConfig:
@@ -101,7 +100,7 @@ class TrainingConfig:
 class TrainingCallback:
     """Base class for training callbacks."""
     
-    def __call__(self, trainer: Trainer, episode: int, metrics: Dict[str, Any]):
+    def __call__(self, trainer: DQNTrainer, episode: int, metrics: Dict[str, Any]):
         """Called after each training episode."""
         pass
 
@@ -117,7 +116,7 @@ class ProgressPlotter(TrainingCallback):
         self.epsilons = []
         self.win_rates = []
         
-    def __call__(self, trainer: Trainer, episode: int, metrics: Dict[str, Any]):
+    def __call__(self, trainer: DQNTrainer, episode: int, metrics: Dict[str, Any]):
         """Update plots after each episode."""
         self.episodes.append(episode)
         self.rewards.append(metrics['total_reward'])
@@ -177,7 +176,7 @@ class ModelSaver(TrainingCallback):
         self.save_interval = save_interval
         os.makedirs(save_path, exist_ok=True)
     
-    def __call__(self, trainer: Trainer, episode: int, metrics: Dict[str, Any]):
+    def __call__(self, trainer: DQNTrainer, episode: int, metrics: Dict[str, Any]):
         """Save model checkpoint."""
         if episode % self.save_interval == 0:
             checkpoint_path = os.path.join(self.save_path, f'checkpoint_episode_{episode}.pth')
@@ -239,7 +238,7 @@ def create_training_components(config: TrainingConfig):
     )
     
     # Create trainer
-    trainer = Trainer(
+    trainer = DQNTrainer(
         env=env,
         agent=dqn_agent,
         opponent=opponent,

@@ -30,7 +30,7 @@ class MultiPlaneEncoder(StateEncoder):
         """
         Encode the current state into a 3x3x23 tensor.
         
-        Planes 0-17: Local board states (9 small boards × 2 planes each)
+        - Planes 0-17: Local board states (9 small boards × 2 planes each)
         - Planes 0-8: Player X's moves in each small board (density)
         - Planes 9-17: Player O's moves in each small board (density)
         

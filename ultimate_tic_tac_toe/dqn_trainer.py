@@ -70,11 +70,13 @@ class MultiPlaneEncoder:
                 start_col = block_col * 3
                 small_board = observation[start_row:start_row+3, start_col:start_col+3]
                 
-                # Plane for Player X's moves (planes 0-8) - binary encoding
-                tensor[block_row, block_col, block_idx] = 1.0 if np.any(small_board == 1) else 0.0
-                
-                # Plane for Player O's moves (planes 9-17) - binary encoding
-                tensor[block_row, block_col, block_idx + 9] = 1.0 if np.any(small_board == 2) else 0.0
+                # Players' moves in each small board (binary: 0/1), (planes 0-8: X, planes 9-17: O)
+                for slot_row in range(3):
+                    for slot_col in range(3):
+                        if small_board[slot_row, slot_col] == 1:  # Player X
+                            tensor[slot_row, slot_col, block_idx] = 1.0 # Plane for Player X's moves (planes 0-8)
+                        elif small_board[slot_row, slot_col] == 2:  # Player O
+                            tensor[slot_row, slot_col, block_idx + 9] = 1.0 # Plane for Player O's moves (planes 9-17)
         
         # Planes 18-20: Global board state
         block_status = info['block_status']

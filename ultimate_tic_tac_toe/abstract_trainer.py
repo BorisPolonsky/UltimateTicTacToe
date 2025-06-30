@@ -5,10 +5,12 @@ Abstract training algorithms for Ultimate Tic-Tac-Toe.
 
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from .env import UltimateTicTacToeEnv
 from .abstract_agent import Agent
-from .abstract_encoders import StateEncoder
+
+if TYPE_CHECKING:
+    from .dqn_trainer import MultiPlaneEncoder
 
 
 class TrainingAlgorithm(ABC):
@@ -16,7 +18,7 @@ class TrainingAlgorithm(ABC):
     
     @abstractmethod
     def train_episode(self, env: UltimateTicTacToeEnv, agent: Agent, 
-                     opponent: Agent, encoder: StateEncoder) -> Dict[str, Any]:
+                     opponent: Agent, encoder: 'MultiPlaneEncoder') -> Dict[str, Any]:
         """
         Train for one episode.
         

@@ -6,9 +6,7 @@ Ultimate Tic-Tac-Toe package.
 from .env import UltimateTicTacToeEnv
 from .abstract_agent import Agent
 from .agent_impl import RandomAgent, HumanAgent
-from .dqn_trainer import DQNAgent, DQNTrainingAlgorithm, DQNTrainer
-from .abstract_encoders import StateEncoder
-from .encoder_impl import MultiPlaneEncoder, SimpleEncoder, EncoderFactory
+from .dqn_trainer import DQNAgent, DQNTrainingAlgorithm, DQNTrainer, MultiPlaneEncoder
 from .abstract_trainer import TrainingAlgorithm
 
 __all__ = [
@@ -19,9 +17,6 @@ __all__ = [
     'DQNAgent',
     'DQNTrainingAlgorithm',
     'DQNTrainer',
-    'StateEncoder',
     'MultiPlaneEncoder',
-    'SimpleEncoder',
-    'EncoderFactory',
     'TrainingAlgorithm'
 ]

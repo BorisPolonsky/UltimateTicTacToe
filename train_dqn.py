@@ -19,8 +19,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
 from ultimate_tic_tac_toe.agent_impl import RandomAgent
-from ultimate_tic_tac_toe.dqn_trainer import DQNAgent, DQNTrainer, DQNTrainingAlgorithm
-from ultimate_tic_tac_toe.encoder_impl import EncoderFactory
+from ultimate_tic_tac_toe.dqn_trainer import DQNAgent, DQNTrainer, DQNTrainingAlgorithm, MultiPlaneEncoder
 
 
 class TrainingConfig:
@@ -34,12 +33,12 @@ class TrainingConfig:
         self.encoder_type = kwargs.get('encoder_type', 'multiplane')
         
         # DQN hyperparameters
-        self.learning_rate = kwargs.get('learning_rate', 1e-4)
+        self.learning_rate = kwargs.get('learning_rate', 1e-5)
         self.gamma = kwargs.get('gamma', 0.99)
         self.epsilon = kwargs.get('epsilon', 1.0)
-        self.epsilon_min = kwargs.get('epsilon_min', 0.01)
-        self.epsilon_decay = kwargs.get('epsilon_decay', 0.995)
-        self.memory_size = kwargs.get('memory_size', 10000)
+        self.epsilon_min = kwargs.get('epsilon_min', 0.1)
+        self.epsilon_decay = kwargs.get('epsilon_decay', 0.9995)
+        self.memory_size = kwargs.get('memory_size', 50000)
         self.batch_size = kwargs.get('batch_size', 32)
         self.target_update_freq = kwargs.get('target_update_freq', 1000)
         
@@ -209,7 +208,7 @@ def create_training_components(config: TrainingConfig):
     )
     
     # Create encoder
-    encoder = EncoderFactory.create_encoder(config.encoder_type)
+    encoder = MultiPlaneEncoder()
     print(f"Using encoder: {type(encoder).__name__}")
     print(f"Input shape: {encoder.get_input_shape()}")
     
@@ -342,13 +341,13 @@ def main():
     
     # Training parameters
     parser.add_argument('--episodes', type=int, default=10000, help='Number of training episodes')
-    parser.add_argument('--learning-rate', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--learning-rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
-    parser.add_argument('--epsilon-min', type=float, default=0.01, help='Minimum exploration rate')
-    parser.add_argument('--epsilon-decay', type=float, default=0.995, help='Epsilon decay rate')
+    parser.add_argument('--epsilon-min', type=float, default=0.1, help='Minimum exploration rate')
+    parser.add_argument('--epsilon-decay', type=float, default=0.9995, help='Epsilon decay rate')
     parser.add_argument('--batch-size', type=int, default=32, help='Batch size for training')
-    parser.add_argument('--memory-size', type=int, default=10000, help='Replay memory size')
+    parser.add_argument('--memory-size', type=int, default=50000, help='Replay memory size')
     
     # Model parameters
     parser.add_argument('--encoder', type=str, default='multiplane', 

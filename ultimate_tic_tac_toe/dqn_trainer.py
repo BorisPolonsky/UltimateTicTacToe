@@ -25,22 +25,22 @@ class MultiPlaneEncoder:
     """
     Multi-plane tensor encoder similar to AlphaGo.
     
-    Encodes the game state as a 3x3x31 tensor where:
+    Encodes the game state as a 3x3x32 tensor where:
     - 18 planes for local board states (9 small boards × 2 players)
     - 3 planes for global board state (captured boards)
     - 9 planes for valid moves (one per small board)
-    - 1 plane for current player
+    - 2 planes for current player (one for each player)
     
-    Total: 3x3x31 tensor
+    Total: 3x3x32 tensor
     """
     
     def __init__(self):
-        self.num_planes = 31  # 18 local + 3 global + 9 valid + 1 player
+        self.num_planes = 32  # 18 local + 3 global + 9 valid + 2 player
         self.input_shape = (3, 3, self.num_planes)
     
     def encode(self, observation: np.ndarray, info: Dict[str, Any]) -> np.ndarray:
         """
-        Encode the current state into a 3x3x31 tensor.
+        Encode the current state into a 3x3x32 tensor.
         
         Planes 0-17: Local Board States (9 small boards × 2 planes each)
         - Planes 0-8: Player X's moves in each small board (binary: 0/1)
@@ -54,8 +54,9 @@ class MultiPlaneEncoder:
         Planes 21-29: Valid Moves (9 planes)
         - Planes 21-29: For each small board, a 3x3 binary matrix indicating valid moves
         
-        Plane 30: Current Player (1 plane)
-        - Plane 30: Whose turn it is (binary: 0 = X, 1 = O)
+        Planes 30-31: Current Player (2 planes)
+        - Plane 30: Player X's turn (binary: 0/1)
+        - Plane 31: Player O's turn (binary: 0/1)
         """
         # Initialize tensor
         tensor = np.zeros(self.input_shape, dtype=np.float32)
@@ -119,12 +120,14 @@ class MultiPlaneEncoder:
                             if valid_moves[action] == 1:
                                 tensor[slot_row, slot_col, plane_idx] = 1.0
         
-        # Plane 30: Current player (0 for X, 1 for O)
+        # Planes 30-31: Current player (one-hot encoding)
         current_player = info['next_player']
         if current_player == 1:  # Player X
-            tensor[:, :, 30] = 0.0
+            tensor[:, :, 30] = 1.0  # Plane 30: Player X's turn
+            tensor[:, :, 31] = 0.0  # Plane 31: Player O's turn
         elif current_player == 2:  # Player O
-            tensor[:, :, 30] = 1.0
+            tensor[:, :, 30] = 0.0  # Plane 30: Player X's turn
+            tensor[:, :, 31] = 1.0  # Plane 31: Player O's turn
         
         return tensor
     
@@ -197,7 +200,7 @@ class DQNNetwork(nn.Module):
         self.fc_layers = fc_layers
         
         # Determine if input is 3D (multiplane) or 1D (simple)
-        if len(input_shape) == 3:  # Multiplane encoder: (3, 3, 31)
+        if len(input_shape) == 3:  # Multiplane encoder: (3, 3, 32)
             self._build_conv_network()
         else:  # Simple encoder: (81,)
             self._build_fc_network()
@@ -208,7 +211,7 @@ class DQNNetwork(nn.Module):
         conv_layers = []
         bn_layers = []
         
-        in_channels = self.input_shape[2]  # Start with input channels (31)
+        in_channels = self.input_shape[2]  # Start with input channels (32)
         
         for i, out_channels in enumerate(self.conv_channels):
             conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=2, padding=1))

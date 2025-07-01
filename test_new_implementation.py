@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script for the new Ultimate Tic-Tac-Toe implementation.
-Demonstrates the Board class and Gym environment.
+Demonstrates the Board class and Gymnasium environment.
 """
 
 import numpy as np
@@ -52,8 +52,8 @@ def test_board_class():
 
 
 def test_gym_environment():
-    """Test the Gym environment."""
-    print("\n=== Testing Gym Environment ===")
+    """Test the Gymnasium environment."""
+    print("\n=== Testing Gymnasium Environment ===")
     
     # Create environment
     env = UltimateTicTacToeEnv(render_mode="human")

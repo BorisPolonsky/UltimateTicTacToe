@@ -1,13 +1,13 @@
-import gym
+import gymnasium as gym
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 from typing import Tuple, Dict, Any, Optional
 from .board import Board
 
 
 class UltimateTicTacToeEnv(gym.Env):
     """
-    OpenAI Gym environment for Ultimate Tic-Tac-Toe.
+    Gymnasium environment for Ultimate Tic-Tac-Toe.
     
     Action space: Discrete(81) representing all possible moves
     Observation space: Box(9, 9) representing the board state
@@ -192,8 +192,11 @@ class UltimateTicTacToeEnv(gym.Env):
         """Render the current state."""
         if self.render_mode == "human":
             print(self.board)
+            return None
         elif self.render_mode == "rgb_array":
             return self._render_rgb_array()
+        else:
+            return None
     
     def _render_rgb_array(self) -> np.ndarray:
         """Render as RGB array for visualization."""
@@ -250,4 +253,4 @@ gym.register(
     id='UltimateTicTacToe-v0',
     entry_point='ultimate_tic_tac_toe.env:UltimateTicTacToeEnv',
     max_episode_steps=81,  # Maximum possible moves
-) 
+)

@@ -5,9 +5,9 @@ This demonstrates a simple random agent and how to interact with the environment
 """
 
 import numpy as np
-import gym
+import gymnasium as gym
 from ultimate_tic_tac_toe.env import UltimateTicTacToeEnv
-from ultimate_tic_tac_toe.agent import RandomAgent
+from ultimate_tic_tac_toe.agent_impl import RandomAgent
 
 
 def play_game(env, agent1, agent2, render=False):
@@ -120,13 +120,13 @@ def demonstrate_environment():
 
 
 def test_environment_registration():
-    """Test that the environment is properly registered with gym."""
+    """Test that the environment is properly registered with gymnasium."""
     print("Testing Environment Registration...")
     
     try:
-        # Try to create environment using gym.make
+        # Try to create environment using gymnasium.make
         env = gym.make('UltimateTicTacToe-v0')
-        print("✅ Environment successfully registered with gym!")
+        print("✅ Environment successfully registered with gymnasium!")
         
         # Test basic functionality
         observation, info = env.reset()

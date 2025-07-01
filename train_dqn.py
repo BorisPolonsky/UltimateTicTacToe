@@ -46,6 +46,7 @@ class TrainingConfig:
         self.memory_size = kwargs.get('memory_size', 50000)
         self.batch_size = kwargs.get('batch_size', 32)
         self.target_update_freq = kwargs.get('target_update_freq', 1000)
+        self.use_double_dqn = kwargs.get('use_double_dqn', True)
         
         # Training settings
         self.num_episodes = kwargs.get('num_episodes', 10000)
@@ -76,6 +77,7 @@ class TrainingConfig:
             'memory_size': self.memory_size,
             'batch_size': self.batch_size,
             'target_update_freq': self.target_update_freq,
+            'use_double_dqn': self.use_double_dqn,
             'num_episodes': self.num_episodes,
             'evaluation_interval': self.evaluation_interval,
             'save_interval': self.save_interval,
@@ -244,8 +246,12 @@ def create_training_components(config: TrainingConfig):
         target_update_freq=config.target_update_freq,
         gamma=config.gamma,
         epsilon_decay=config.epsilon_decay,
-        epsilon_min=config.epsilon_min
+        epsilon_min=config.epsilon_min,
+        use_double_dqn=config.use_double_dqn
     )
+    
+    algorithm_name = "Double DQN" if config.use_double_dqn else "Standard DQN"
+    print(f"Using algorithm: {algorithm_name}")
     
     # Create trainer
     trainer = DQNTrainer(
@@ -267,7 +273,8 @@ def train_dqn(config: TrainingConfig, callbacks: Optional[List[TrainingCallback]
     """Main training function."""
     
     print("=" * 60)
-    print("DQN Training for Ultimate Tic-Tac-Toe")
+    algorithm_name = "Double DQN" if config.use_double_dqn else "Standard DQN"
+    print(f"{algorithm_name} Training for Ultimate Tic-Tac-Toe")
     print("=" * 60)
     
     # Save configuration
@@ -382,6 +389,12 @@ def main():
     parser.add_argument('--sovereignty', type=str, default='none', 
                        choices=['none', 'both'], help='Sovereignty upon draw rule')
     
+    # Algorithm settings
+    parser.add_argument('--use-double-dqn', action='store_true', default=True,
+                       help='Use Double DQN (default: True)')
+    parser.add_argument('--no-double-dqn', dest='use_double_dqn', action='store_false',
+                       help='Use standard DQN instead of Double DQN')
+    
     args = parser.parse_args()
     
     # Parse network architecture parameters
@@ -407,7 +420,8 @@ def main():
         sovereignty_upon_draw=args.sovereignty,
         hidden_size=args.hidden_size,
         conv_channels=conv_channels,
-        fc_layers=fc_layers
+        fc_layers=fc_layers,
+        use_double_dqn=args.use_double_dqn
     )
     
     # Start training

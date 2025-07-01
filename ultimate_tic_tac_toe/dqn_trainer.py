@@ -431,7 +431,8 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
                  target_update_freq: int = 100,  # More frequent updates
                  gamma: float = 0.99,
                  epsilon_decay: float = 0.9995,
-                 epsilon_min: float = 0.1):
+                 epsilon_min: float = 0.1,
+                 use_double_dqn: bool = True):
         """
         Initialize DQN training algorithm.
         
@@ -442,6 +443,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
             gamma: Discount factor
             epsilon_decay: Epsilon decay rate
             epsilon_min: Minimum epsilon value
+            use_double_dqn: Whether to use Double DQN (True) or standard DQN (False)
         """
         self.memory = deque(maxlen=memory_size)
         self.batch_size = batch_size
@@ -449,6 +451,7 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         self.gamma = gamma
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
+        self.use_double_dqn = use_double_dqn
         self.step_count = 0
         self.loss_history = []  # Track loss for monitoring
     
@@ -535,18 +538,11 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         # [BATCH_SIZE, 1]
         current_q_values = agent.q_network(states).gather(1, actions.unsqueeze(1))
         
-        # Next Q-values (from target network) with action masking
+        # Compute target Q-values using either standard DQN or Double DQN
         with torch.no_grad():
-            next_q_values_raw = agent.target_network(next_states)  # [BATCH_SIZE, 81]
-            
-            # Mask invalid actions with large negative values
-            masked_q_values = next_q_values_raw.clone()
-            masked_q_values[next_valid_actions == 0] = -1e6
-            
-            # Take maximum over valid actions only
-            next_q_values = masked_q_values.max(1)[0]  # [BATCH_SIZE]
-            
-            target_q_values = rewards + (self.gamma * next_q_values * ~dones)
+            target_q_values = self._compute_target_q_values(
+                agent, next_states, next_valid_actions, rewards, dones
+            )
         
         # Compute loss
         loss = F.mse_loss(current_q_values.squeeze(), target_q_values)
@@ -572,6 +568,50 @@ class DQNTrainingAlgorithm(TrainingAlgorithm):
         self.loss_history.append(loss.item())
         
         return loss.item()
+    
+    def _compute_target_q_values(self, agent, next_states, next_valid_actions, rewards, dones):
+        """
+        Compute target Q-values using either standard DQN or Double DQN.
+        
+        Args:
+            agent: The DQN agent
+            next_states: Next state tensors [BATCH_SIZE, 3, 3, num_planes]
+            next_valid_actions: Valid actions mask [BATCH_SIZE, 81]
+            rewards: Reward tensors [BATCH_SIZE]
+            dones: Done flags [BATCH_SIZE]
+            
+        Returns:
+            Target Q-values [BATCH_SIZE]
+        """
+        if self.use_double_dqn:
+            # Double DQN: Use main network to select action, target network to evaluate
+            # Use main network to select the best action for next state
+            next_q_values_main = agent.q_network(next_states)  # [BATCH_SIZE, 81]
+            
+            # Mask invalid actions with large negative values
+            masked_q_values_main = next_q_values_main.clone()
+            masked_q_values_main[next_valid_actions == 0] = -1e6
+            
+            # Select best action using main network
+            next_actions = masked_q_values_main.argmax(1)  # [BATCH_SIZE]
+            
+            # Use target network to evaluate the selected action
+            next_q_values_target = agent.target_network(next_states)  # [BATCH_SIZE, 81]
+            next_q_values = next_q_values_target.gather(1, next_actions.unsqueeze(1)).squeeze(1)  # [BATCH_SIZE]
+        else:
+            # Standard DQN: Use target network for both action selection and evaluation
+            next_q_values_raw = agent.target_network(next_states)  # [BATCH_SIZE, 81]
+            
+            # Mask invalid actions with large negative values
+            masked_q_values = next_q_values_raw.clone()
+            masked_q_values[next_valid_actions == 0] = -1e6
+            
+            # Take maximum over valid actions only
+            next_q_values = masked_q_values.max(1)[0]  # [BATCH_SIZE]
+        
+        # Compute target Q-values
+        target_q_values = rewards + (self.gamma * next_q_values * ~dones)
+        return target_q_values
 
 
 class DQNTrainer:
